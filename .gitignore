@@ -1,0 +1,22 @@
+# Python / Django
+__pycache__/
+*.py[cod]
+*.sqlite3
+backend/.env
+backend/staticfiles/
+.pytest_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+frontend/**/dist/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Env files (never commit real secrets — .env.example files ARE committed)
+*.env
+!*.env.example

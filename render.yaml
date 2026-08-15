@@ -1,0 +1,84 @@
+# Render Blueprint. Connecting this repo to Render and choosing "New Blueprint
+# Instance" reads this file and creates all three services below in one step.
+# See docs/deployment.md for the exact click-by-click walkthrough and the
+# full list of environment variables you'll be asked to paste in.
+#
+# Nothing secret lives in this file — every real credential is marked
+# `sync: false` below, which makes Render prompt you for it in the dashboard
+# instead of reading a value from here.
+
+services:
+  # ---------------------------------------------------------------------
+  # Public marketing website — static export, served from Render's CDN.
+  # Indexed by Google. See docs/api-spec.md / docs/deployment.md.
+  # ---------------------------------------------------------------------
+  - type: web
+    name: kathwada-public-site
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build --workspace=apps/public-site
+    staticPublishPath: apps/public-site/out
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false # the backend service's URL + /api/v1, e.g. https://kathwada-erp-backend.onrender.com/api/v1
+      - key: NEXT_PUBLIC_ERP_URL
+        sync: false # the ERP static site's URL, e.g. https://kathwada-erp.onrender.com
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false # this site's own URL, used for canonical/OG tags + sitemap — e.g. https://kathwada-public-site.onrender.com
+
+  # ---------------------------------------------------------------------
+  # ERP frontend — static export, served from Render's CDN. Must NEVER be
+  # indexed by Google — see the noindex/robots.txt/header defense in
+  # apps/erp/app/robots.ts, apps/erp/app/layout.tsx, and the headers below.
+  # ---------------------------------------------------------------------
+  - type: web
+    name: kathwada-erp
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build --workspace=apps/erp
+    staticPublishPath: apps/erp/out
+    headers:
+      - path: /*
+        name: X-Robots-Tag
+        value: "noindex, nofollow"
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false # same backend URL as above, e.g. https://kathwada-erp-backend.onrender.com/api/v1
+
+  # ---------------------------------------------------------------------
+  # Django + DRF backend. Free plan sleeps after 15 min idle — see
+  # docs/deployment.md Stage A vs Stage B for when to upgrade this.
+  # ---------------------------------------------------------------------
+  - type: web
+    name: kathwada-erp-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: ./build.sh
+    startCommand: gunicorn config.wsgi:application
+    healthCheckPath: /api/v1/health/
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.prod
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true # Render generates and stores a real random secret — you never see or type this
+      - key: DJANGO_ALLOWED_HOSTS
+        sync: false # e.g. kathwada-erp-backend.onrender.com (no https://, no trailing slash)
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false # e.g. https://kathwada-public-site.onrender.com,https://kathwada-erp.onrender.com
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false # same two URLs as above
+      - key: DATABASE_URL
+        sync: false # from Supabase: Project Settings -> Database -> Connection string (URI, "Session pooler" mode)
+      - key: AWS_ACCESS_KEY_ID
+        sync: false # from Supabase: Project Settings -> Storage -> S3 access keys
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false # from Supabase: Project Settings -> Storage -> S3 access keys
+      - key: AWS_STORAGE_BUCKET_NAME
+        sync: false # the bucket name you create in Supabase Storage, e.g. kathwada-documents
+      - key: AWS_S3_ENDPOINT_URL
+        sync: false # from Supabase: Project Settings -> Storage -> S3 Connection -> Endpoint
+      - key: AWS_S3_REGION_NAME
+        sync: false # from the same Supabase Storage S3 Connection panel, e.g. ap-south-1
