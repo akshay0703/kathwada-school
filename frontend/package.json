@@ -1,0 +1,14 @@
+{
+  "name": "kathwada-frontend",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:public-site": "npm run dev --workspace=apps/public-site",
+    "dev:erp": "npm run dev --workspace=apps/erp",
+    "build": "npm run build --workspace=apps/public-site && npm run build --workspace=apps/erp",
+    "lint": "npm run lint --workspace=apps/public-site && npm run lint --workspace=apps/erp"
+  }
+}

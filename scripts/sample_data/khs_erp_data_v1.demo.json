@@ -1,0 +1,332 @@
+{
+  "school": "KATHWADA HIGH SCHOOL",
+  "addr": "Kathwada, Ahmedabad, Gujarat",
+  "classLabel": "Std 10 – A",
+  "year": "2025–26",
+  "teacher": "",
+  "principal": "",
+  "subjects": [
+    "Gujarati",
+    "English",
+    "Mathematics",
+    "Science",
+    "Social Science",
+    "Sanskrit/Computer"
+  ],
+  "max": {
+    "fst": 25,
+    "sst": 25,
+    "ut1": 50,
+    "ut2": 50,
+    "main": 80
+  },
+  "pass": {
+    "fst": 8,
+    "sst": 8,
+    "ut1": 17,
+    "ut2": 17,
+    "main": 26
+  },
+  "internalMax": {
+    "p1": 5,
+    "p2": 5,
+    "p3": 10
+  },
+  "internalPass": 7,
+  "students": [
+    {
+      "roll": 1,
+      "name": "Aarav Patel",
+      "marks": {
+        "Gujarati": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "English": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "Mathematics": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "Science": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "Social Science": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "Sanskrit/Computer": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        }
+      },
+      "cls": "",
+      "dob": "",
+      "guardian": "",
+      "guardianPhone": "",
+      "address": ""
+    },
+    {
+      "roll": 2,
+      "name": "Diya Shah",
+      "marks": {
+        "Gujarati": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "English": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "Mathematics": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "Science": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "Social Science": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "Sanskrit/Computer": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        }
+      },
+      "cls": "",
+      "dob": "",
+      "guardian": "",
+      "guardianPhone": "",
+      "address": ""
+    },
+    {
+      "roll": 3,
+      "name": "Krish Mehta",
+      "marks": {
+        "Gujarati": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "English": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "Mathematics": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "Science": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "Social Science": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        },
+        "Sanskrit/Computer": {
+          "fst": "",
+          "sst": "",
+          "ut1": "",
+          "ut2": "",
+          "main": "",
+          "internal": {
+            "p1": "",
+            "p2": "",
+            "p3": ""
+          }
+        }
+      },
+      "cls": "",
+      "dob": "",
+      "guardian": "",
+      "guardianPhone": "",
+      "address": ""
+    }
+  ],
+  "teachers": [
+    {
+      "id": 1,
+      "name": "Meera Joshi",
+      "subject": "Mathematics",
+      "classes": "Std 9-10",
+      "phone": "",
+      "email": ""
+    },
+    {
+      "id": 2,
+      "name": "Rohan Trivedi",
+      "subject": "Science",
+      "classes": "Std 9-10",
+      "phone": "",
+      "email": ""
+    }
+  ],
+  "attendanceByDate": {},
+  "feeTotals": {},
+  "feePayments": [],
+  "books": [
+    {
+      "id": 1,
+      "title": "NCERT Mathematics",
+      "author": "NCERT",
+      "category": "Textbook",
+      "copies": 5
+    },
+    {
+      "id": 2,
+      "title": "A Brief History of Time",
+      "author": "Stephen Hawking",
+      "category": "Science",
+      "copies": 2
+    }
+  ],
+  "issues": [],
+  "counters": {
+    "nextRoll": 4,
+    "nextTeacherId": 3,
+    "nextBookId": 3,
+    "nextIssueId": 1,
+    "nextPaymentId": 1
+  }
+}
