@@ -82,3 +82,7 @@ services:
         sync: false # from Supabase: Project Settings -> Storage -> S3 Connection -> Endpoint
       - key: AWS_S3_REGION_NAME
         sync: false # from the same Supabase Storage S3 Connection panel, e.g. ap-south-1
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false # your real email — becomes your first Admin login. See docs/deployment.md.
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false # a strong password you choose — save it yourself, Render/Claude never see it
