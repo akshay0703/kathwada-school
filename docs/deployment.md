@@ -55,18 +55,120 @@ generating fake requests to dodge it.
 frontends still free. Domain registration/renewal is separate and is
 whatever you pay your registrar — not estimated here.
 
+## Automated development & deployment pipeline
+
+**As of this update, routine deploys are fully automatic.** You no longer
+open Render after a normal code change — this section explains exactly what
+happens instead, and the one-time setup that made it possible.
+
+### The flow
+
+```
+Claude writes code, tests it locally, commits, pushes to GitHub (main branch)
+        ↓
+GitHub Actions CI runs automatically:
+  - backend: lint, migrate, migration-file check, tests, Django system check
+  - frontend: lint, build both apps
+  - migration-script: legacy-data parser tests
+  - docker-build: confirms all three Docker images still build (dev parity)
+        ↓
+   all of the above passed?
+        ↓ yes                              ↓ no
+   deploy job fires the 3            STOPS HERE — nothing is deployed,
+   Render "Deploy Hooks"             the failure is visible as a red ✕
+        ↓                            on the GitHub Actions run
+   Render builds & deploys
+   each service independently
+        ↓
+   smoke-test job waits for the live
+   URLs to respond, checks: backend
+   health+DB, auth endpoint, public
+   site, ERP site, sitemap, robots.txt
+        ↓
+   You open the live site and test the actual feature
+```
+
+### Why this is safe (the gate, explained)
+
+Render's own "auto-deploy on every push" feature is turned **off**
+(`autoDeploy: false` on all three services in `render.yaml`). The **only**
+thing that can trigger a deploy now is GitHub Actions successfully POSTing to
+a Render "Deploy Hook" URL — and that step (`deploy` job) is declared with
+`needs: [backend, frontend, migration-script]`, so GitHub Actions itself
+refuses to run it unless every one of those jobs already succeeded. A broken
+build, a failing test, or an uncommitted migration file **cannot** reach
+production — there's no path for it to.
+
+### Migrations specifically
+
+- Migrations run automatically, inside `backend/build.sh`, on every backend
+  deploy — you never run one manually.
+- `set -o errexit` at the top of `build.sh` means **if `migrate` fails, the
+  entire build fails**, and Render's build-then-swap deployment model means
+  the previously-live version keeps running — a failed migration can never
+  take the live site down or leave it half-upgraded.
+- CI additionally runs `python manage.py makemigrations --check --dry-run`
+  before tests — this fails the build if any model change wasn't committed
+  as an actual migration file, which is what guarantees "migration files
+  must be committed to GitHub" rather than generated on the fly.
+- Nothing in this pipeline ever runs `makemigrations` automatically in
+  production, and nothing resets or seeds the production database — `migrate`
+  only ever applies migration files that are already committed and reviewed.
+
+### Why there's no automatic rollback
+
+If a bad deploy included a database migration, reverting the *code* doesn't
+undo that migration — the database schema stays changed either way. Building
+an automatic rollback that's actually safe in every case isn't realistic, so
+this pipeline deliberately doesn't attempt one. Instead, a failure is made
+**loud and visible** (red ✕ on the GitHub Actions run, and/or a failed
+`smoke-test` job), and the fix is a deliberate, informed decision — see
+`emergency-operations.md`'s rollback section.
+
+### One-time setup: Deploy Hooks + GitHub Secrets
+
+This is a **one-time** setup, not something repeated per feature. Three
+copy-paste steps in Render, three in GitHub.
+
+**WHAT TO DO — repeat this once per service (3 times total: backend, public site, ERP)**
+1. Open: the service's page in Render (e.g. `kathwada-erp-backend`)
+2. Click: **"Settings"** in the sidebar
+3. Select: scroll to find **"Deploy Hook"**, click **"Create Deploy Hook"** (or it may already show one)
+4. Enter: nothing — copy the generated URL shown
+5. Do NOT change: don't share this URL publicly — treat it like a password (anyone with it could trigger a deploy, though not access your data)
+6. Expected result: a URL like `https://api.render.com/deploy/srv-xxxxx?key=yyyyy`
+
+**WHAT TO DO — add each URL as a GitHub secret (3 times total)**
+1. Open: `github.com/akshay0703/kathwada-school` → **"Settings"** tab (repo settings, not your account settings)
+2. Click: **"Secrets and variables"** → **"Actions"** in the left sidebar
+3. Click: **"New repository secret"**
+4. Enter: **Name** — exactly one of `RENDER_DEPLOY_HOOK_BACKEND`, `RENDER_DEPLOY_HOOK_PUBLIC_SITE`, or `RENDER_DEPLOY_HOOK_ERP` (matching which service's hook you copied) — **Value** — paste the URL from the matching step above
+5. Do NOT change: the exact secret names above — the CI workflow refers to them by these exact names
+6. Expected result: after all three, the "Repository secrets" list shows all three names (values are always hidden, even from you, once saved — that's normal)
+
+Once all three secrets exist, the pipeline described above is fully live —
+the very next push to `main` that passes CI will deploy automatically.
+
 ## Repository layout for deployment
 
-- `render.yaml` (repo root) — a Render **Blueprint**. Connecting this repo to
-  Render and choosing "New Blueprint Instance" reads this file and creates
-  all three services in one step, with every secret value left blank for you
-  to fill in (see "Environment variables" below) — nothing secret is ever
-  committed.
+- `render.yaml` (repo root) — a Render **Blueprint**, used **once** to
+  originally create the three services. After that one-time setup, editing
+  this file does not change live service settings by itself — Render only
+  re-reads it on an explicit "Manual Sync" (see Render's own Blueprint docs
+  if you ever need that) or the very first creation. Ongoing deploys are
+  driven by the CI pipeline above, not by this file changing.
+- `.github/workflows/ci.yml` — the automated pipeline itself: lint, tests,
+  builds, the migration-file guard, the CI-gated `deploy` job, and the
+  post-deploy `smoke-test` job.
 - `backend/build.sh` — what Render runs to build the backend: install
-  dependencies, collect static files, run migrations. You never run this
-  yourself.
+  dependencies, collect static files, run migrations, seed the permission
+  matrix, and (idempotently, safely) ensure the first Admin account exists.
+  You never run this yourself.
 - `backend/config/settings/prod.py` — production Django settings: HTTPS
-  enforcement, secure cookies, HSTS, WhiteNoise-compressed static files.
+  enforcement, secure cookies (including the cross-site `SameSite=None`
+  fix required by Render's per-service domain isolation — see
+  `prototype-analysis.md`'s troubleshooting history if curious), HSTS,
+  WhiteNoise-compressed static files.
 - `frontend/apps/public-site/next.config.js` and
   `frontend/apps/erp/next.config.js` — both set `output: 'export'`, making
   each app a static site (a folder of plain HTML/CSS/JS) rather than a
@@ -94,6 +196,20 @@ grouped by service.
 | `AWS_STORAGE_BUCKET_NAME` | The bucket name you create in Supabase Storage, e.g. `kathwada-documents` |
 | `AWS_S3_ENDPOINT_URL` | From Supabase: **Project Settings → Storage → S3 Connection → Endpoint** |
 | `AWS_S3_REGION_NAME` | Same Supabase Storage S3 Connection panel, e.g. `ap-south-1` |
+| `DJANGO_SUPERUSER_EMAIL` | Your real email — becomes the first Admin login |
+| `DJANGO_SUPERUSER_PASSWORD` | A strong password you choose — see "Admin account management" below for what happens after |
+
+**Admin account management.** `create_admin_from_env` (run automatically by
+`build.sh` on every deploy) only ever *creates* the account if it doesn't
+already exist — it never resets an existing user's password, so leaving
+these two variables set in Render is safe indefinitely and does not "recreate
+or overwrite" anything on subsequent deploys. Once you've confirmed you can
+log in, you may optionally remove these two variables from Render (Settings
+→ Environment) to reduce standing secret exposure — this is a hardening
+step, not a requirement. **Every Admin/Principal/Teacher/Staff/Student/Parent
+account after this first one should be created from inside the ERP itself**
+(Phase 1+ user-management screens), never via environment variables — see
+`permissions.md`.
 
 **`kathwada-public-site` (Render Static Site):**
 
@@ -147,29 +263,37 @@ does and doesn't mean for security:
 
 ## Exact launch sequence
 
-1. **You** create free accounts on Render and Supabase (both support
-   "Sign up with GitHub" — no separate password to manage).
-2. **You** create a Supabase project — this gives you both the database and
-   file storage together.
-3. **You** copy a small number of values from Supabase's dashboard into
-   Render's dashboard when prompted (exact fields listed above).
-4. **You** connect this GitHub repository to Render and choose "New
-   Blueprint Instance" — Render reads `render.yaml` and creates all three
-   services automatically.
-5. Render builds and deploys all three services. This takes a few minutes;
-   you watch progress in Render's dashboard, no action needed.
-6. **You** run one command Render gives you a button for (or a documented
-   one-line management command) to create the first Admin login.
-7. Open the public site, open the ERP, log in — confirms everything is
-   wired correctly.
-8. Whenever you buy a real domain: add it in Render's dashboard (exact DNS
-   values will be provided at that time) — no application code changes.
-9. Submit the site to Google Search Console (see below).
+**One-time setup (already completed):**
+1. Render and Supabase accounts created.
+2. Supabase project created (database + storage).
+3. GitHub repository connected to Render via Blueprint — all three services
+   created.
+4. Environment variables entered directly in Render (never via this chat).
+5. First deploy completed; Admin account created automatically via
+   `DJANGO_SUPERUSER_EMAIL`/`DJANGO_SUPERUSER_PASSWORD`.
+6. Public site, ERP, and backend all confirmed live and working.
+7. Deploy Hooks created in Render + added as GitHub Actions secrets (see
+   "One-time setup" above) — this is what makes the flow below possible.
+
+**Ongoing workflow, from now on:**
+1. You ask for a feature. Claude builds it, tests it, commits, and pushes.
+2. GitHub Actions runs CI automatically.
+3. If CI passes, GitHub Actions triggers the three Render deploys
+   automatically.
+4. GitHub Actions waits for the live URLs to respond correctly
+   (`smoke-test` job) and reports success or failure.
+5. You open the live site and test the actual feature.
+
+You do not repeat steps 1-7 above for future features — those were one-time
+infrastructure setup. Buying a real domain later (add it in Render's
+dashboard, no application code changes) and submitting to Google Search
+Console (see below) remain the only two genuinely new one-off tasks ahead.
 
 ## WHAT I NEED TO DO — beginner-friendly account setup
 
-These are the only two things to do right now. Everything else happens
-after these accounts exist and Claude has confirmed the repository is ready.
+These were the initial one-time steps (already completed) to set up the
+underlying accounts. Kept here for reference / for setting up a second
+environment (e.g. staging) later, not because you need to repeat them now.
 
 **Create your Render account**
 1. Open: [render.com](https://render.com)
@@ -202,16 +326,32 @@ already built and tested: `/sitemap.xml` and `/robots.txt` both generate
 correctly from the public site (see `project-status.md`'s evidence), listing
 exactly the seven real public pages and nothing from the ERP.
 
-## What this environment could and couldn't verify
+## What has actually been verified live, vs. what's new and not yet exercised
+
+**Verified against real, live infrastructure (by you, directly):**
 
 | Claim | Status |
 |---|---|
-| Both frontend apps build as static exports | **Verified** — actually built, output inspected |
-| `sitemap.xml` / `robots.txt` generate with correct content | **Verified** — actual file contents inspected |
-| ERP's three-layer noindex protection exists | **Verified** — meta tag and robots.txt confirmed in build output; the `X-Robots-Tag` header is a Render-dashboard feature, so the header itself can only be confirmed once deployed (config is written and YAML-valid, not yet runtime-tested) |
-| No sensitive data in the ERP static build | **Verified** — full grep audit of every file in the build output, see `project-status.md` |
-| Backend passes all tests under prod-equivalent settings | **Verified for `check --deploy`, `collectstatic`, and `migrate`.** The full authenticated-flow test suite was re-run under prod settings and correctly received HTTPS redirects (expected — `SECURE_SSL_REDIRECT=True` behaving as designed against a test client that doesn't simulate TLS); the suite's actual pass/fail evidence comes from the dev-settings run, which is also what CI uses |
-| Render actually deploys this successfully | **NOT RUNTIME VERIFIED** — no Render account exists yet |
-| Supabase actually connects and serves data | **NOT RUNTIME VERIFIED** — no Supabase project exists yet |
-| Real HTTPS/custom-domain behavior | **NOT RUNTIME VERIFIED** — no domain connected yet |
-| GitHub Actions CI runs on a real PR | **NOT RUNTIME VERIFIED** — every step has been manually replayed locally with passing results, but no real Actions run has occurred |
+| Render actually deploys this successfully | **VERIFIED** — all three services live |
+| Supabase actually connects and serves data | **VERIFIED** — `/api/v1/health/` returns `"database":true` against the real Supabase Postgres instance |
+| Public website live, all 7 pages, correct branding | **VERIFIED** |
+| `sitemap.xml` / `robots.txt` live and correct | **VERIFIED** |
+| ERP login works end-to-end (real session, real role) | **VERIFIED** — including diagnosing and fixing a real cross-site cookie issue along the way (`SameSite=None` fix, see `prod.py`) |
+| First Admin account creation on the free tier (no Shell access) | **VERIFIED** — `create_admin_from_env` management command, idempotent, tested locally and confirmed working live |
+
+**New in this update (CI-gated automated deploy pipeline) — CODE-COMPLETE, NOT YET RUNTIME VERIFIED:**
+
+| Claim | Status |
+|---|---|
+| `makemigrations --check` guard blocks CI on uncommitted model changes | **Verified locally** (ran the exact command, confirmed "No changes detected" / correct exit code) — not yet seen actually blocking a real bad PR |
+| `deploy` job only runs after backend+frontend+migration-script succeed | **Verified via YAML inspection** (`needs:` dependency confirmed) — not yet seen running for real (requires the one-time Deploy Hook + GitHub Secrets setup below, which hasn't happened yet) |
+| `smoke-test` job correctly checks the live URLs | **Curl commands verified syntactically correct** against this project's real URLs, but blocked from executing end-to-end in this sandboxed environment specifically (its network egress only allows a small domain whitelist that doesn't include `onrender.com` — confirmed via the deny-reason header, not assumed) — will run for real the first time this pipeline actually fires |
+| Render's `autoDeploy: false` actually stops independent deploys | **NOT YET VERIFIED** — requires watching a real push and confirming Render does *not* deploy on its own anymore |
+
+The honest summary: the application-level deployment (the hard part — real
+database, real auth, real live site) is proven. The new orchestration layer
+on top of it (CI-gated deploys, automated smoke tests) is built and locally
+verified wherever this environment allows, but its first real end-to-end run
+hasn't happened yet — that happens the moment the one-time Deploy Hook setup
+above is completed and the next code change is pushed.
+

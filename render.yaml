@@ -1,7 +1,12 @@
-# Render Blueprint. Connecting this repo to Render and choosing "New Blueprint
-# Instance" reads this file and creates all three services below in one step.
-# See docs/deployment.md for the exact click-by-click walkthrough and the
-# full list of environment variables you'll be asked to paste in.
+# Render Blueprint. Used ONCE to originally create the three services below
+# via "New Blueprint Instance." Editing this file no longer changes live
+# service settings automatically — see docs/deployment.md's "Editing this
+# file after initial setup" note.
+#
+# Deploys are now triggered exclusively by GitHub Actions (.github/workflows/
+# ci.yml), after all tests/lint/build checks pass — never by Render itself on
+# every push (autoDeploy: false on all three services below, deliberately).
+# See docs/deployment.md for the full automated-pipeline explanation.
 #
 # Nothing secret lives in this file — every real credential is marked
 # `sync: false` below, which makes Render prompt you for it in the dashboard
@@ -18,6 +23,7 @@ services:
     rootDir: frontend
     buildCommand: npm install && npm run build --workspace=apps/public-site
     staticPublishPath: apps/public-site/out
+    autoDeploy: false # deploys are triggered only by GitHub Actions, after CI passes — see .github/workflows/ci.yml and docs/deployment.md
     envVars:
       - key: NEXT_PUBLIC_API_BASE_URL
         sync: false # the backend service's URL + /api/v1, e.g. https://kathwada-erp-backend.onrender.com/api/v1
@@ -37,6 +43,7 @@ services:
     rootDir: frontend
     buildCommand: npm install && npm run build --workspace=apps/erp
     staticPublishPath: apps/erp/out
+    autoDeploy: false # deploys are triggered only by GitHub Actions, after CI passes
     headers:
       - path: /*
         name: X-Robots-Tag
@@ -57,6 +64,7 @@ services:
     buildCommand: ./build.sh
     startCommand: gunicorn config.wsgi:application
     healthCheckPath: /api/v1/health/
+    autoDeploy: false # deploys are triggered only by GitHub Actions, after CI passes
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.prod

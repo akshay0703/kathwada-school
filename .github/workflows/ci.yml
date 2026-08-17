@@ -46,6 +46,10 @@ jobs:
         working-directory: backend
         run: python manage.py migrate
 
+      - name: Check for missing migrations (fail if model changes aren't committed as migration files)
+        working-directory: backend
+        run: python manage.py makemigrations --check --dry-run
+
       - name: Run tests
         working-directory: backend
         run: python -m pytest -v
@@ -111,3 +115,95 @@ jobs:
 
       - name: Build erp image
         run: docker build -f docker/frontend.Dockerfile --build-arg APP_DIR=apps/erp -t kathwada-erp:ci ./frontend
+
+  # ---------------------------------------------------------------------
+  # Deploy — only runs on a real push to main (never on a pull request),
+  # and only after every check above has already passed. This is the gate:
+  # if backend, frontend, or migration-script failed, `needs:` prevents this
+  # job from running at all, so a broken build is never deployed.
+  #
+  # How it deploys: Render's own auto-deploy-on-push is turned OFF
+  # (render.yaml sets autoDeploy: false on all three services) specifically
+  # so Render can no longer deploy independently of CI passing. Instead,
+  # each service has a "Deploy Hook" URL (created once, manually, in Render's
+  # dashboard — see docs/deployment.md) stored as a GitHub Actions secret.
+  # POSTing to that URL is the ONLY thing that triggers a deploy now.
+  # ---------------------------------------------------------------------
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, migration-script]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Trigger backend deploy
+        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}"
+
+      - name: Trigger public-site deploy
+        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_PUBLIC_SITE }}"
+
+      - name: Trigger ERP deploy
+        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_ERP }}"
+
+  # ---------------------------------------------------------------------
+  # Smoke test — waits for the deploys triggered above to actually finish,
+  # then checks the real, live URLs. Deploy hooks fire-and-forget (the POST
+  # returns instantly, the deploy itself takes a minute or two), so this
+  # job retries each check for a few minutes before giving up, rather than
+  # checking once immediately and reporting a false failure.
+  #
+  # If this job fails, the deploy is NOT automatically rolled back (rolling
+  # back automatically alongside a database migration cannot be done safely
+  # in general — an already-applied migration doesn't un-apply itself just
+  # because the code reverts). Instead this job failing is the visible
+  # signal to look at manually — see docs/emergency-operations.md.
+  # ---------------------------------------------------------------------
+  smoke-test:
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Wait for backend health endpoint
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS "https://kathwada-erp-backend.onrender.com/api/v1/health/" | grep -q '"database":true'; then
+              echo "Backend healthy (database connected)."
+              exit 0
+            fi
+            echo "Attempt $i/30: backend not ready yet, waiting 10s..."
+            sleep 10
+          done
+          echo "::error::Backend did not report healthy within 5 minutes."
+          exit 1
+
+      - name: Check auth endpoint is reachable
+        run: curl -fsS "https://kathwada-erp-backend.onrender.com/api/v1/auth/csrf/" > /dev/null
+
+      - name: Wait for public website
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null -w "%{http_code}" "https://kathwada-public-site.onrender.com/" | grep -q "200"; then
+              echo "Public site is up."
+              exit 0
+            fi
+            echo "Attempt $i/30: public site not ready yet, waiting 10s..."
+            sleep 10
+          done
+          echo "::error::Public site did not return 200 within 5 minutes."
+          exit 1
+
+      - name: Wait for ERP site
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null -w "%{http_code}" "https://kathwada-erp.onrender.com/login" | grep -q "200"; then
+              echo "ERP site is up."
+              exit 0
+            fi
+            echo "Attempt $i/30: ERP site not ready yet, waiting 10s..."
+            sleep 10
+          done
+          echo "::error::ERP site did not return 200 within 5 minutes."
+          exit 1
+
+      - name: Check sitemap.xml and robots.txt
+        run: |
+          curl -fsS "https://kathwada-public-site.onrender.com/sitemap.xml" | grep -q "<urlset" 
+          curl -fsS "https://kathwada-public-site.onrender.com/robots.txt" | grep -q "User-Agent"

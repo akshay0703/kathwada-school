@@ -27,6 +27,8 @@ What this makes easier or harder later.
 - [`0003-multi-class-section-and-academic-year.md`](0003-multi-class-section-and-academic-year.md)
   — multiple simultaneous class-sections, first-class Academic Year, no
   overwriting history on promotion
+- [`0004-ci-gated-deploys-via-render-deploy-hooks.md`](0004-ci-gated-deploys-via-render-deploy-hooks.md)
+  — how automatic, CI-gated deployment works and why no Render API key was needed
 
 Next to write, once Phase 1 starts: an ADR for whichever approach is chosen
 for the blank-vs-zero-mark open question (`project-status.md` open decisions).

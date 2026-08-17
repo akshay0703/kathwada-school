@@ -1,18 +1,41 @@
 # Project Status — Single Source of Truth
 
-**Last updated:** after Render/Supabase deployment-preparation pass (see
-"Deployment preparation status" below).
+**Last updated:** after (1) live deployment to real Render + Supabase
+infrastructure was completed and personally verified by you, and (2) the
+CI-gated automated deployment pipeline was built on top of it (see
+"Live deployment status" and "Automated deployment pipeline status" below).
 **If this document and any other document disagree, this document wins** —
 update it whenever status changes.
 
 ## Current phase
 
-**Phase 0 (Foundations) — implementation complete, sign-off given.
-Deployment approach has since pivoted to managed services (Render +
-Supabase, see `deployment.md`) and that preparation work is also complete,
-pending your account setup and the external verification listed below.**
+**Phase 0 (Foundations) — complete and deployed to real, live infrastructure.**
+Public website, ERP, and backend are all live on the internet, backed by a
+real Supabase PostgreSQL database, with working authentication. An automated
+CI-gated deployment pipeline has been built on top of this so that future
+feature work (Phase 1+) does not require manual Render interaction — see
+"Automated deployment pipeline status" below for exactly what's proven vs.
+newly built.
 
 Phase 1 has **not** started. Do not begin it without explicit approval.
+
+## Live deployment status — personally verified by you, on real infrastructure
+
+| Item | Status | Evidence |
+|---|---|---|
+| Django backend live | **VERIFIED** | `https://kathwada-erp-backend.onrender.com/api/v1/health/` reachable |
+| Supabase PostgreSQL connection | **VERIFIED** | Health endpoint returns `"database":true`; required diagnosing and fixing a real password-URL-encoding issue along the way |
+| Public website live, all pages | **VERIFIED** | All 7 pages load correctly with real branding |
+| `sitemap.xml` / `robots.txt` live | **VERIFIED** | Correct content confirmed on the live URLs |
+| ERP live, login works | **VERIFIED** | Required diagnosing and fixing a real cross-site session cookie issue (`SESSION_COOKIE_SAMESITE`/`CSRF_COOKIE_SAMESITE = "None"`, since Render isolates each service's subdomain as a separate "site") |
+| Session persists, correct role returned | **VERIFIED** | Logged in as Admin, stayed authenticated, dashboard showed correct role |
+| First Admin account creation (no Shell on free tier) | **VERIFIED** | `create_admin_from_env` management command, built specifically because Render's free Web Service plan has no Shell access |
+
+This is real, not a simulation — three genuine bugs were found and fixed
+during this process (a literal `[YOUR-PASSWORD]` placeholder that wasn't
+substituted, Render's free tier lacking Shell access, and the cross-site
+cookie issue), each diagnosed from actual error messages rather than guessed
+at. See `deployment.md` for the technical detail on each fix.
 
 ## Phase 0 status — VERIFIED / CODE-COMPLETE / NOT COMPLETE
 
@@ -42,6 +65,29 @@ Definitions (do not blur these):
 | 0.14 | Deployment smoke test | **NOT COMPLETE** (depends entirely on 0.2) |
 
 **8 VERIFIED · 5 CODE-COMPLETE · 1 NOT COMPLETE.**
+
+## Automated deployment pipeline status (this update)
+
+Built in response to: manual Render/GitHub/Supabase operation being
+unsustainable per-feature. Goal: Claude develops → tests → commits → pushes
+→ CI validates → automatic deploy → you test the live feature, with zero
+manual Render interaction for routine changes.
+
+| Item | Status | Evidence |
+|---|---|---|
+| `makemigrations --check` CI guard | **VERIFIED locally** | Ran the exact command against the current codebase — "No changes detected," exit 0. Not yet seen catching a real violation (would need a deliberately bad PR to prove the negative case). |
+| Full backend CI job re-verified after all changes | **VERIFIED locally** | ruff, migrate, migration-check, pytest (9/9), Django check — all run in the exact order CI uses, all passed |
+| `deploy` job structurally gated on other jobs passing | **VERIFIED via YAML inspection** | `needs: [backend, frontend, migration-script]` confirmed present and syntactically valid |
+| `smoke-test` job logic | **CODE-COMPLETE, NOT RUNTIME VERIFIED** | curl commands confirmed syntactically correct against this project's real live URLs, but this sandbox's network egress doesn't allow reaching `onrender.com` (confirmed via `x-deny-reason: host_not_allowed`, not assumed) — will run for real on the next actual push once Deploy Hooks are set up |
+| Render's `autoDeploy: false` | **CODE-COMPLETE, NOT RUNTIME VERIFIED** | Set correctly in `render.yaml`, but this only takes effect on Render's side after a Blueprint sync — not yet confirmed that Render has stopped auto-deploying independently |
+| Deploy Hooks created in Render | **NOT COMPLETE — one-time manual step pending** | See `deployment.md`'s "One-time setup" walkthrough — you haven't done this yet |
+| Deploy Hook URLs added as GitHub Secrets | **NOT COMPLETE — one-time manual step pending** | Same as above |
+| First real end-to-end automated deploy | **NOT COMPLETE** | Depends on the two manual steps above being done first |
+
+**In short: the automation is built and locally verified everywhere this
+environment allows, but it has never fired for real yet.** The one-time
+Deploy Hook + GitHub Secrets setup (6 dashboard clicks total, see
+`deployment.md`) is what's between "built" and "proven."
 
 ## Deployment preparation status (Render + Supabase managed-services model)
 
@@ -120,10 +166,10 @@ approval.
 - **Backend:** `config/` (settings split, urls, wsgi/asgi) · `apps/common`
   (base models, health check, exception handler) · `apps/accounts` (User,
   Role, Module, RolePermission, session auth views, `HasModulePermission`,
-  `seed_permissions` management command) · `apps/audit` (AuditLog model +
-  request-logging middleware). Domain apps (`academics`, `people`, `exams`,
-  `marks`, `reportcards`, `attendance`, `fees`, `library`, `documents`) exist
-  as empty scaffolding only — no models.
+  `seed_permissions` and `create_admin_from_env` management commands) ·
+  `apps/audit` (AuditLog model + request-logging middleware). Domain apps
+  (`academics`, `people`, `exams`, `marks`, `reportcards`, `attendance`,
+  `fees`, `library`, `documents`) exist as empty scaffolding only — no models.
 - **Frontend:** `packages/ui` (design tokens extracted verbatim from the
   prototype's CSS, Button, globals.css) · `packages/api-client` (cookie-based
   fetch wrapper with CSRF handling) · `apps/public-site` (Home page, nav
@@ -134,8 +180,9 @@ approval.
   `scripts/sample_data/khs_erp_data_v1.demo.json` + tests.
 - **Docs:** this file, plus `architecture.md`, `database-schema.md`,
   `permissions.md`, `grading-engine.md`, `grading-engine-test-spec.md`,
-  `api-spec.md`, `deployment.md`, `prototype-analysis.md` (original 17-point
-  prototype breakdown), `decisions/`, `handoffs/`.
+  `api-spec.md`, `deployment.md`, `emergency-operations.md`,
+  `prototype-analysis.md` (original 17-point prototype breakdown),
+  `decisions/`, `handoffs/`.
 
 ## Pending infrastructure verification (the actual next steps, in order)
 
@@ -188,16 +235,16 @@ approval.
 
 ## Exact next step
 
-**Deployment now follows the managed-services model in `deployment.md`, not
-Docker.** The Docker-based local stack described earlier in this document's
-history is now optional/dev-only — self-operating Docker/nginx/Postgres/MinIO
-is no longer part of the approved deployment path.
+**Complete the one-time Deploy Hook + GitHub Secrets setup** described in
+`deployment.md`'s "One-time setup: Deploy Hooks + GitHub Secrets" section —
+6 dashboard clicks total (3 in Render, 3 in GitHub). Once done, the very
+next code change Claude pushes will flow through the fully automated
+pipeline for the first time: CI → deploy → smoke-test → ready for you to
+test live, with no manual Render interaction.
 
-Next: **you** create free Render and Supabase accounts (exact
-click-by-click steps in `deployment.md`'s "WHAT I NEED TO DO" section), then
-Claude will walk through connecting them, one confirmed step at a time. See
-`handoffs/phase-0-complete.md` for the condensed version of this whole
-document meant to survive a context reset — note that its "NEXT ACTION"
-section predates this deployment pivot and should be read alongside
-`deployment.md`, not in place of it.
-
+After that's confirmed working once, Phase 1 (the first real domain
+feature — see `database-schema.md` for what's approved) can begin on your
+go-ahead. See `handoffs/phase-0-complete.md` for the condensed version of
+this whole document meant to survive a context reset — note that document
+predates both the deployment pivot and this automation layer; this file
+(`project-status.md`) is always the current source of truth if they disagree.
