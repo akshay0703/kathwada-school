@@ -3,13 +3,13 @@ ARG APP_DIR
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-COPY apps/${APP_DIR}/package.json ./apps/${APP_DIR}/package.json
+COPY ${APP_DIR}/package.json ./${APP_DIR}/package.json
 COPY packages ./packages
 RUN npm install
 
 COPY . .
 
-WORKDIR /app/apps/${APP_DIR}
+WORKDIR /app/${APP_DIR}
 RUN npm run build
 
 EXPOSE 3000
