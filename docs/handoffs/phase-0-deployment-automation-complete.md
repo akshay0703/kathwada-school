@@ -1,9 +1,11 @@
 PROJECT: Kathwada High School ERP
 
 CURRENT PHASE:
-Phase 0 complete AND deployed to real, live infrastructure (Render +
-Supabase). CI-gated automated deployment pipeline built on top of it.
-Phase 1 (first real domain features) not started — awaiting approval.
+Phase 0 complete, deployed to real live infrastructure, AND the automated
+CI-gated deployment pipeline is fully set up and PROVEN working end-to-end
+(GitHub Actions run #5: all 6 jobs green, deploy + smoke-test both
+succeeded for real). Phase 1 (first real domain features) not started —
+awaiting approval.
 
 If you are a new Claude picking this project up: read docs/project-status.md
 in full before doing anything else. It is the single source of truth and
@@ -51,22 +53,22 @@ REAL BUGS FOUND AND FIXED DURING LIVE DEPLOYMENT (all now fixed in code):
    (both require Secure=True, already set). This fix remains correct even
    after a future custom domain puts both apps under one shared parent.
 
-AUTOMATED DEPLOYMENT PIPELINE (built this session, NOT yet proven end-to-end):
-- .github/workflows/ci.yml now has a `deploy` job (needs: backend, frontend,
+AUTOMATED DEPLOYMENT PIPELINE (built and PROVEN this session, run #5):
+- .github/workflows/ci.yml has a `deploy` job (needs: backend, frontend,
   migration-script all passing) that POSTs to 3 Render Deploy Hook URLs
   (stored as GitHub secrets RENDER_DEPLOY_HOOK_BACKEND,
   RENDER_DEPLOY_HOOK_PUBLIC_SITE, RENDER_DEPLOY_HOOK_ERP), followed by a
   `smoke-test` job that polls the live URLs with retries.
-- render.yaml now sets autoDeploy: false on all three services — Render no
-  longer deploys independently on every push; only the CI-triggered Deploy
-  Hooks can trigger a deploy now.
-- Also added: `makemigrations --check --dry-run` as a CI guard step, so an
+- render.yaml sets autoDeploy: false on all three services — confirmed
+  working: the only deploy trigger in run #5 was CI, not Render itself.
+- `makemigrations --check --dry-run` runs as a CI guard step, so an
   uncommitted model change fails the build rather than silently drifting.
-- ONE-TIME MANUAL STEP NOT YET DONE: creating the 3 Deploy Hook URLs in
-  Render and adding them as the 3 GitHub secrets above (6 dashboard clicks,
-  see docs/deployment.md's "One-time setup" section for exact steps). Until
-  this is done, pushes to main will NOT auto-deploy (Render's own
-  auto-deploy is off, and nothing has replaced it yet for the user).
+- Deploy Hook URLs created in Render + added as the 3 GitHub secrets —
+  DONE, confirmed working.
+- BONUS: the first real `docker-build` run (never previously executed with
+  an actual Docker daemon) caught a real bug — a doubled `apps/apps/...`
+  path in docker/frontend.Dockerfile, silently wrong since Phase 0. Fixed
+  in commit 994773d. Exactly the kind of thing this pipeline exists to catch.
 
 VERIFIED (this session, evidence in docs/project-status.md):
 - Live deployment: backend, database connection, public site, ERP, sitemap,
@@ -79,11 +81,8 @@ VERIFIED (this session, evidence in docs/project-status.md):
   confirmed correct.
 
 CODE-COMPLETE, NOT RUNTIME VERIFIED:
-- smoke-test job's curl logic (syntactically verified against real URLs,
-  but this sandbox's network egress blocks onrender.com — confirmed via
-  x-deny-reason header, not assumed; will prove itself on the first real run)
-- autoDeploy: false actually stopping Render's independent deploys
-- The full CI-gated pipeline firing end-to-end for a real code change
+- (nothing remaining in this category as of run #5 — everything that was
+  here previously is now VERIFIED, see above)
 
 KNOWN LIMITATIONS (still true, unchanged):
 - Free tier: backend sleeps after 15 min idle (~30-60s cold start)
@@ -93,17 +92,12 @@ KNOWN LIMITATIONS (still true, unchanged):
 - No automatic rollback — deliberate, see docs/decisions/0004
 
 NEXT ACTION:
-User needs to complete the one-time Deploy Hook + GitHub Secrets setup
-(docs/deployment.md, "One-time setup" section, 6 dashboard clicks). Offer to
-walk them through it in the same beginner-friendly WHAT TO DO format used
-throughout this project, one step at a time, waiting for confirmation after
-each click — that pattern worked well and should continue.
-
-AFTER THAT:
-The next push to main (any future feature work) will be the first real
-end-to-end test of the automated pipeline. Once confirmed working, update
-project-status.md's "Automated deployment pipeline status" table from
-CODE-COMPLETE to VERIFIED for each item, then Phase 1 can begin on the
-user's explicit go-ahead. Phase 1 scope is the domain apps listed under
-"NOT COMPLETE" in project-status.md's Phase 0 table, built against
-docs/database-schema.md and docs/permissions.md exactly as documented.
+None required for the pipeline itself — it's proven and working. The next
+natural step is Phase 1 (first real domain feature), on the user's explicit
+go-ahead. Phase 1 scope is the domain apps listed under "NOT COMPLETE" in
+project-status.md's Phase 0 table, built against docs/database-schema.md
+and docs/permissions.md exactly as documented. When Phase 1 starts, the
+normal workflow becomes: user asks for a feature → Claude builds, tests,
+commits, pushes → CI validates → auto-deploys → user tests it live. No
+Render/GitHub Actions/Supabase manual steps should be needed for routine
+feature work from this point forward.

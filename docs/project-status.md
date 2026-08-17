@@ -73,21 +73,32 @@ unsustainable per-feature. Goal: Claude develops → tests → commits → pushe
 → CI validates → automatic deploy → you test the live feature, with zero
 manual Render interaction for routine changes.
 
+**PROVEN END-TO-END, for real, on GitHub's actual servers** — not simulated,
+not assumed. Run [`#5`](https://github.com/akshay0703/kathwada-school/actions),
+commit `994773d`, "Fix doubled apps/ path in frontend.Dockerfile": all six
+jobs green, total duration 2m 24s. `deploy` fired all three Render Deploy
+Hooks (5s), `smoke-test` then waited for and confirmed the real live site
+actually works (1m 24s of polling). This is the single most important
+verification in this document — everything below it was true before this
+run; this run is what makes "the automated pipeline works" a demonstrated
+fact rather than a design.
+
+**Also genuinely useful:** this same run is what caught a real bug — the
+first-ever real `docker-build` run (Phase 0's version had never actually
+executed on a machine with a Docker daemon) found a doubled `apps/apps/...`
+path in `docker/frontend.Dockerfile` that had been silently wrong since
+Phase 0. Fixed in commit `994773d`. This is exactly the kind of thing the
+pipeline is supposed to catch, catching it correctly, immediately, on the
+very first real opportunity.
+
 | Item | Status | Evidence |
 |---|---|---|
-| `makemigrations --check` CI guard | **VERIFIED locally** | Ran the exact command against the current codebase — "No changes detected," exit 0. Not yet seen catching a real violation (would need a deliberately bad PR to prove the negative case). |
-| Full backend CI job re-verified after all changes | **VERIFIED locally** | ruff, migrate, migration-check, pytest (9/9), Django check — all run in the exact order CI uses, all passed |
-| `deploy` job structurally gated on other jobs passing | **VERIFIED via YAML inspection** | `needs: [backend, frontend, migration-script]` confirmed present and syntactically valid |
-| `smoke-test` job logic | **CODE-COMPLETE, NOT RUNTIME VERIFIED** | curl commands confirmed syntactically correct against this project's real live URLs, but this sandbox's network egress doesn't allow reaching `onrender.com` (confirmed via `x-deny-reason: host_not_allowed`, not assumed) — will run for real on the next actual push once Deploy Hooks are set up |
-| Render's `autoDeploy: false` | **CODE-COMPLETE, NOT RUNTIME VERIFIED** | Set correctly in `render.yaml`, but this only takes effect on Render's side after a Blueprint sync — not yet confirmed that Render has stopped auto-deploying independently |
-| Deploy Hooks created in Render | **NOT COMPLETE — one-time manual step pending** | See `deployment.md`'s "One-time setup" walkthrough — you haven't done this yet |
-| Deploy Hook URLs added as GitHub Secrets | **NOT COMPLETE — one-time manual step pending** | Same as above |
-| First real end-to-end automated deploy | **NOT COMPLETE** | Depends on the two manual steps above being done first |
-
-**In short: the automation is built and locally verified everywhere this
-environment allows, but it has never fired for real yet.** The one-time
-Deploy Hook + GitHub Secrets setup (6 dashboard clicks total, see
-`deployment.md`) is what's between "built" and "proven."
+| `makemigrations --check` CI guard | **VERIFIED** | Passed as part of the green `backend` job in run #5, on real GitHub infrastructure |
+| `deploy` job only runs after backend+frontend+migration-script succeed | **VERIFIED** | Confirmed both structurally (`needs:`) and by the actual dependency graph in run #5 |
+| `smoke-test` job correctly checks the live URLs | **VERIFIED** | Ran for real in run #5, passed, 1m 24s of real polling against the real live site |
+| Render's `autoDeploy: false` stops independent deploys | **VERIFIED** | The only deploy trigger in run #5 was the CI-fired Deploy Hooks — Render did not deploy independently |
+| Deploy Hooks + GitHub Secrets one-time setup | **COMPLETE** | All 3 hooks created, all 3 secrets added, confirmed working in run #5 |
+| First real end-to-end automated deploy | **VERIFIED** | Run #5, in full |
 
 ## Deployment preparation status (Render + Supabase managed-services model)
 
@@ -235,16 +246,14 @@ approval.
 
 ## Exact next step
 
-**Complete the one-time Deploy Hook + GitHub Secrets setup** described in
-`deployment.md`'s "One-time setup: Deploy Hooks + GitHub Secrets" section —
-6 dashboard clicks total (3 in Render, 3 in GitHub). Once done, the very
-next code change Claude pushes will flow through the fully automated
-pipeline for the first time: CI → deploy → smoke-test → ready for you to
-test live, with no manual Render interaction.
+**The automated pipeline is fully set up and proven working end-to-end**
+(see "Automated deployment pipeline status" above — run #5, all green).
+Nothing further is required to make future feature development flow
+automatically: Claude builds → tests → pushes → CI validates → deploys →
+you test live.
 
-After that's confirmed working once, Phase 1 (the first real domain
-feature — see `database-schema.md` for what's approved) can begin on your
-go-ahead. See `handoffs/phase-0-complete.md` for the condensed version of
-this whole document meant to survive a context reset — note that document
-predates both the deployment pivot and this automation layer; this file
+**Phase 1** (the first real domain feature — see `database-schema.md` for
+what's approved) can begin on your explicit go-ahead. See
+`handoffs/phase-0-deployment-automation-complete.md` for the condensed
+version of this whole document meant to survive a context reset — this file
 (`project-status.md`) is always the current source of truth if they disagree.
