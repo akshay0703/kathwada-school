@@ -2,6 +2,7 @@
 
 import { api, type CurrentUser } from "@kathwada/api-client";
 import { Button } from "@kathwada/ui";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -46,9 +47,29 @@ export default function DashboardPage() {
       <p>
         Signed in as <strong>{user?.email}</strong> — role: <strong>{user?.role ?? "(none assigned)"}</strong>
       </p>
-      <p style={{ color: "var(--ink)", opacity: 0.7, fontSize: "14px" }}>
-        This is the Phase 0 dashboard shell. Students, Marks, Attendance, Fees, Library, and Report Card
-        modules are built in Phase 1 per the approved architecture.
+
+      <div style={{ marginTop: "24px", display: "flex", flexWrap: "wrap", gap: "12px" }}>
+        <Link
+          href="/academic-years"
+          style={{
+            display: "block",
+            border: "1px solid var(--line)",
+            borderRadius: "8px",
+            padding: "16px 20px",
+            textDecoration: "none",
+            minWidth: "200px",
+          }}
+        >
+          <div style={{ color: "var(--navy-primary)", fontWeight: 600, fontSize: "15px" }}>Academic Years</div>
+          <div style={{ color: "var(--ink)", opacity: 0.65, fontSize: "13px", marginTop: "4px" }}>
+            Manage the school&apos;s academic year calendar
+          </div>
+        </Link>
+      </div>
+
+      <p style={{ color: "var(--ink)", opacity: 0.7, fontSize: "14px", marginTop: "24px" }}>
+        This is the Phase 1 dashboard shell. Students, Marks, Attendance, Fees, Library, and Report Card
+        modules are built in later Phase 1 increments per the approved architecture.
       </p>
     </main>
   );

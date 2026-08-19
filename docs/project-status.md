@@ -1,23 +1,53 @@
 # Project Status — Single Source of Truth
 
-**Last updated:** after (1) live deployment to real Render + Supabase
-infrastructure was completed and personally verified by you, and (2) the
-CI-gated automated deployment pipeline was built on top of it (see
-"Live deployment status" and "Automated deployment pipeline status" below).
+**Last updated:** after Phase 1.1 (Academic Years module) was implemented,
+tested (23/23 backend tests passing), and prepared for deployment via the
+proven CI-gated pipeline. See "Phase 1.1 status" below.
 **If this document and any other document disagree, this document wins** —
 update it whenever status changes.
 
 ## Current phase
 
-**Phase 0 (Foundations) — complete and deployed to real, live infrastructure.**
-Public website, ERP, and backend are all live on the internet, backed by a
-real Supabase PostgreSQL database, with working authentication. An automated
-CI-gated deployment pipeline has been built on top of this so that future
-feature work (Phase 1+) does not require manual Render interaction — see
-"Automated deployment pipeline status" below for exactly what's proven vs.
-newly built.
+**Phase 1.1 (Academic Years) — implemented, tested, committed. Deployment
+result pending your push + the automated pipeline running** (see "Phase 1.1
+status" below for exact evidence). Phase 0 remains complete and live —
+public website, ERP, and backend all running on real infrastructure with a
+working automated deployment pipeline (see "Live deployment status" and
+"Automated deployment pipeline status" further down).
 
-Phase 1 has **not** started. Do not begin it without explicit approval.
+Phase 1.2 has **not** started. Do not begin it without explicit approval —
+this file's "Exact next step" explains what happens between now and then.
+
+## Phase 1.1 status (Academic Years)
+
+| Item | Status | Evidence |
+|---|---|---|
+| `AcademicYear` model (`apps/academics/models.py`) | **VERIFIED** | Migration applied cleanly; all 3 DB constraints (one-current-per-school, unique label, end>start) individually confirmed by triggering real `IntegrityError`s against a real database, not just reasoned about |
+| Soft delete preserves historical data | **VERIFIED** | Test confirms a "deleted" year's row still exists (`all_with_deleted`), still has its original data, just excluded from normal queries |
+| `mark-current` action (atomic, unsets siblings) | **VERIFIED** | Test confirms marking a second year current correctly unsets the first, and only one `is_current=True` row ever exists |
+| Serializer validation (date order, overlap, required fields, duplicate label) | **VERIFIED** | 4 dedicated tests, all passing |
+| API endpoints (`/api/v1/academic-years/`, list/create/update/delete/mark-current) | **VERIFIED** | Exercised directly by the test suite via real HTTP requests through DRF's test client |
+| Permissions (Admin full access, Principal C/E but not D, Teacher/Student/Parent view-only, anonymous denied) | **VERIFIED** | 7 dedicated tests, all passing |
+| **A real Phase 0 bug found and fixed**: `HasModulePermission`'s `action_map` attribute silently collided with DRF's own internal `ViewSetMixin.action_map`, breaking every ViewSet-based permission check | **VERIFIED fixed** | Root-caused via direct debugging (not guessed), confirmed via `inspect.getsource` on DRF's own `ViewSetMixin.initialize_request`; renamed to `permission_action_map`; full test suite re-run and passing after the fix. This bug existed since Phase 0 but was invisible until this app's tests were the first to exercise a real ViewSet (Phase 0's only permission test used a plain `APIView`, which never hit this code path) |
+| Full backend test suite (Phase 0 + Phase 1.1 combined) | **VERIFIED** | 23/23 passing, run in CI's exact order (ruff → migrate → migration-check → pytest → Django check) |
+| Frontend: Academic Years admin page (`/academic-years`) | **VERIFIED builds** | List/create/edit/mark-current/delete UI, role-aware (hides write controls for non-Admin/Principal, matching but not replacing server-side enforcement); static export builds cleanly, TypeScript and lint both clean |
+| Frontend: no sensitive data in static build | **VERIFIED** | Same audit discipline as Phase 0 — confirmed the built page's HTML shell has zero visible content; all data loads via authenticated API calls at runtime |
+| Deployment (CI-gated automated pipeline) | **NOT YET RUN for this change** | Code is committed locally; pushing it is the next step, at which point the already-proven pipeline (see "Automated deployment pipeline status" below) handles the rest automatically |
+
+**Two deliberate deviations from the literal Phase 1.1 spec, both explicit,
+neither silent:**
+1. **Principal permissions on Academic Years** — the spec asked for
+   Admin+Principal to create/update/delete; the previously-approved matrix
+   only gave Principal View+Export. Resolved by granting Principal
+   Create+Edit (updating both `seed_permissions.py` and `permissions.md`)
+   but deliberately **not** Delete, matching the pattern used for nearly
+   every other module in the matrix and reflecting that Academic Years are
+   foundational, historical data.
+2. **`school` field** — no `School` entity exists anywhere in the approved
+   schema (this is a single-school system by design). Implemented as a
+   plain default-valued `CharField`, not a new relational entity, satisfying
+   the literal field requirement without expanding the schema into
+   multi-tenancy that was never approved.
 
 ## Live deployment status — personally verified by you, on real infrastructure
 
@@ -178,13 +208,16 @@ approval.
   (base models, health check, exception handler) · `apps/accounts` (User,
   Role, Module, RolePermission, session auth views, `HasModulePermission`,
   `seed_permissions` and `create_admin_from_env` management commands) ·
-  `apps/audit` (AuditLog model + request-logging middleware). Domain apps
-  (`academics`, `people`, `exams`, `marks`, `reportcards`, `attendance`,
-  `fees`, `library`, `documents`) exist as empty scaffolding only — no models.
+  `apps/audit` (AuditLog model + request-logging middleware) ·
+  `apps/academics` (**AcademicYear model, serializer, viewset, admin,
+  tests — Phase 1.1**). Remaining domain apps (`people`, `exams`, `marks`,
+  `reportcards`, `attendance`, `fees`, `library`, `documents`) still exist
+  as empty scaffolding only — no models yet.
 - **Frontend:** `packages/ui` (design tokens extracted verbatim from the
   prototype's CSS, Button, globals.css) · `packages/api-client` (cookie-based
-  fetch wrapper with CSRF handling) · `apps/public-site` (Home page, nav
-  shell) · `apps/erp` (login page, protected dashboard shell).
+  fetch wrapper with CSRF handling, typed `AcademicYear` methods) ·
+  `apps/public-site` (Home page, nav shell) · `apps/erp` (login page,
+  protected dashboard shell, **Academic Years admin page — Phase 1.1**).
 - **Infra:** `docker/` (compose file, two Dockerfiles, nginx config) ·
   `.github/workflows/ci.yml`.
 - **Scripts:** `scripts/import_legacy_localstorage.py` (dry-run parser) +
@@ -246,14 +279,21 @@ approval.
 
 ## Exact next step
 
-**The automated pipeline is fully set up and proven working end-to-end**
-(see "Automated deployment pipeline status" above — run #5, all green).
-Nothing further is required to make future feature development flow
-automatically: Claude builds → tests → pushes → CI validates → deploys →
-you test live.
+**Push the Phase 1.1 commit(s) to GitHub** — this repository lives on your
+computer and is pushed via GitHub Desktop (see `deployment.md`'s and past
+conversation's beginner-friendly push steps if a refresher is needed). Once
+pushed, the already-proven automated pipeline (see "Automated deployment
+pipeline status" below) takes over completely: CI validates, deploys, and
+smoke-tests, with zero manual Render interaction from you.
 
-**Phase 1** (the first real domain feature — see `database-schema.md` for
-what's approved) can begin on your explicit go-ahead. See
-`handoffs/phase-0-deployment-automation-complete.md` for the condensed
-version of this whole document meant to survive a context reset — this file
-(`project-status.md`) is always the current source of truth if they disagree.
+**After that deploy succeeds:** open `https://kathwada-erp.onrender.com`,
+log in as Admin, click "Academic Years" from the dashboard, and confirm you
+can create/edit/mark-current/delete a real academic year against the real
+live database. That live confirmation from you is what turns Phase 1.1 from
+"deployed" into "approved" — then Phase 1.2 can be discussed.
+
+See `handoffs/phase-1.1-academic-years.md` for the condensed version of
+this module's work specifically, and
+`handoffs/phase-0-deployment-automation-complete.md` for the broader
+project handoff — this file (`project-status.md`) is always the current
+source of truth if any of them disagree.

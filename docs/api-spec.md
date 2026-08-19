@@ -47,6 +47,6 @@ the ERD.
 | `audit` | `/api/v1/audit-logs/` (read-only, Admin/Principal per `permissions.md`) |
 
 Every planned endpoint above must, when built, declare `module_key` and
-`action_map`/`required_action` per the pattern already established in
+`permission_action_map`/`required_action` per the pattern already established in
 `apps/accounts/permissions.py` (`HasModulePermission`) — no domain app should
 invent its own bespoke permission-checking logic.

@@ -25,7 +25,7 @@ The mechanism (already built, not proposed):
   Module." This **is** the permission matrix, stored as data.
 - `HasModulePermission` — a single generic DRF permission class every
   viewset/view reuses. It denies by default; a view must explicitly declare
-  its `module_key` and either an `action_map` (for ViewSets) or
+  its `module_key` and either a `permission_action_map` (for ViewSets) or
   `required_action` (for plain APIViews).
 - `python manage.py seed_permissions` — seeds the six roles, the module
   registry, and the full default matrix below as data.

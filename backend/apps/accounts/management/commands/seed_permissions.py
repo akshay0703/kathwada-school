@@ -62,7 +62,13 @@ MATRIX = {
         "Staff": [V], "Student": [V], "Parent": [V],
     },
     "academic_years": {
-        "Admin": [V, C, E, D, X], "Principal": [V, X], "Teacher": [V],
+        # Principal: Create+Edit added in Phase 1.1 per explicit instruction
+        # (was View+Export only). Delete deliberately stays Admin-only,
+        # matching the pattern used for nearly every other module in this
+        # matrix (Principal generally lacks Delete) and because Academic
+        # Years are foundational, historical data — see
+        # docs/handoffs/phase-1.1-academic-years.md for the full reasoning.
+        "Admin": [V, C, E, D, X], "Principal": [V, C, E, X], "Teacher": [V],
         "Staff": [V], "Student": [V], "Parent": [V],
     },
     "exams": {
