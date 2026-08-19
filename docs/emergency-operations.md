@@ -67,7 +67,17 @@ This should not come up in normal use — `build.sh` runs `python manage.py migr
 
 **Creating additional Admin/Principal/Teacher/etc. accounts** should be done from inside the ERP itself once Phase 1's user-management screens exist — not via environment variables or scripts. That's the intended long-term path (see `permissions.md`).
 
-**If you're genuinely locked out** (forgot the Admin password, no other Admin exists): tell Claude — the safe fix is updating `DJANGO_SUPERUSER_PASSWORD` in Render's Environment tab, but note the current `create_admin_from_env` command **will not reset an existing user's password** (by design — see its own docstring). Recovering from a lost password needs a small, deliberate one-off command, not the automatic one — ask Claude to prepare that specifically if this happens, rather than guessing at a workaround yourself.
+**If you're genuinely locked out** (forgot the Admin password, no other Admin exists):
+
+**WHAT TO DO**
+1. Open: Render dashboard → `kathwada-erp-backend` → **"Environment"** → **"Edit"**
+2. Enter: update `DJANGO_SUPERUSER_PASSWORD` to a new password (save it privately), and add a **new** row: **Key** `DJANGO_SUPERUSER_RESET_PASSWORD` → **Value** `true`
+3. Click: **"Save Changes"** — this triggers a redeploy
+4. Wait: for the deploy to finish, then log in with the new password
+5. **Immediately after confirming login works:** go back to Environment → Edit → **delete** the `DJANGO_SUPERUSER_RESET_PASSWORD` row entirely, and Save Changes again
+6. Do NOT change: leave `DJANGO_SUPERUSER_RESET_PASSWORD` set after you're done — every future deploy would silently reset the password back to this same value again, including overwriting any password change made later through the ERP itself
+
+This two-variable design (a separate opt-in flag, not just editing the password) is deliberate — see `apps/accounts/management/commands/create_admin_from_env.py`'s docstring for why.
 
 ## "I need to verify the database is actually reachable"
 
