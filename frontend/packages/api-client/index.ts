@@ -6,8 +6,15 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[2]) : null;
 }
 
+// Always fetches a fresh CSRF cookie before an unsafe request, rather than
+// trusting a possibly-stale cookie already present in the browser. The
+// previous version short-circuited ("if the cookie already exists, skip
+// fetching") which could leave a stale/expired token in place — Django then
+// rejects the request with "CSRF token missing" because our code silently
+// omits the header when getCookie() finds nothing usable, rather than
+// erroring loudly. One extra GET per write request is a small, deliberate
+// cost for correctness in a low-traffic school ERP, not a hot path.
 async function ensureCsrfCookie(): Promise<void> {
-  if (getCookie("csrftoken")) return;
   await fetch(`${API_BASE_URL}/auth/csrf/`, { credentials: "include" });
 }
 
@@ -63,7 +70,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   headers.set("Content-Type", "application/json");
   if (isUnsafe) {
     const csrfToken = getCookie("csrftoken");
-    if (csrfToken) headers.set("X-CSRFToken", csrfToken);
+    if (!csrfToken) {
+      // Loud failure instead of silently sending the request without the
+      // header (which is what produced the confusing "CSRF token missing"
+      // error straight from Django, with no client-side context at all).
+      throw new ApiError(0, null, "Could not obtain a CSRF token. Please reload the page and try again.");
+    }
+    headers.set("X-CSRFToken", csrfToken);
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
