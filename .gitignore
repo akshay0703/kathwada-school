@@ -20,3 +20,4 @@ frontend/**/dist/
 # Env files (never commit real secrets — .env.example files ARE committed)
 *.env
 !*.env.example
+out/

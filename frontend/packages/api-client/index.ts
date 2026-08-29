@@ -6,8 +6,15 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[2]) : null;
 }
 
+// Always fetches a fresh CSRF cookie before an unsafe request, rather than
+// trusting a possibly-stale cookie already present in the browser. The
+// previous version short-circuited ("if the cookie already exists, skip
+// fetching") which could leave a stale/expired token in place — Django then
+// rejects the request with "CSRF token missing" because our code silently
+// omits the header when getCookie() finds nothing usable, rather than
+// erroring loudly. One extra GET per write request is a small, deliberate
+// cost for correctness in a low-traffic school ERP, not a hot path.
 async function ensureCsrfCookie(): Promise<void> {
-  if (getCookie("csrftoken")) return;
   await fetch(`${API_BASE_URL}/auth/csrf/`, { credentials: "include" });
 }
 
@@ -19,6 +26,82 @@ export type CurrentUser = {
   is_superuser: boolean;
   last_login_at: string | null;
 };
+
+export type AcademicYear = {
+  id: number;
+  school: string;
+  label: string;
+  start_date: string; // "YYYY-MM-DD"
+  end_date: string;
+  is_current: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SchoolClass = {
+  id: number;
+  name: string;
+  order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Section = {
+  id: number;
+  name: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Subject = {
+  id: number;
+  name: string;
+  code: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ClassSectionSubject = {
+  id: number;
+  subject: number;
+  subject_name: string;
+  subject_code: string;
+};
+
+export type ClassSection = {
+  id: number;
+  school_class: number;
+  school_class_name: string;
+  section: number;
+  section_name: string;
+  academic_year: number;
+  academic_year_label: string;
+  class_teacher: number | null;
+  class_teacher_email: string | null;
+  subjects: ClassSectionSubject[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type PaginatedResponse<T> = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+};
+
+// Thrown by request<T>() so callers can distinguish "the server explained
+// what was wrong" (e.g. a 400 validation error) from a generic failure.
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+
+  constructor(status: number, body: unknown, message: string) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
@@ -32,7 +115,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   headers.set("Content-Type", "application/json");
   if (isUnsafe) {
     const csrfToken = getCookie("csrftoken");
-    if (csrfToken) headers.set("X-CSRFToken", csrfToken);
+    if (!csrfToken) {
+      // Loud failure instead of silently sending the request without the
+      // header (which is what produced the confusing "CSRF token missing"
+      // error straight from Django, with no client-side context at all).
+      throw new ApiError(0, null, "Could not obtain a CSRF token. Please reload the page and try again.");
+    }
+    headers.set("X-CSRFToken", csrfToken);
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -43,18 +132,35 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!response.ok) {
+    let body: unknown = null;
     let detail = response.statusText;
     try {
-      const body = await response.json();
-      detail = body.detail ?? JSON.stringify(body);
+      body = await response.json();
+      detail = extractErrorMessage(body) ?? detail;
     } catch {
       // response had no JSON body — fall back to statusText
     }
-    throw new Error(`${response.status}: ${detail}`);
+    throw new ApiError(response.status, body, detail);
   }
 
   if (response.status === 204) return undefined as T;
   return response.json();
+}
+
+// DRF error bodies vary in shape: {"detail": "..."} for permission/auth
+// errors, {"field_name": ["msg"]} or {"non_field_errors": ["msg"]} for
+// serializer validation errors. This normalizes all of them into one
+// human-readable string for display.
+function extractErrorMessage(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const obj = body as Record<string, unknown>;
+  if (typeof obj.detail === "string") return obj.detail;
+  const messages: string[] = [];
+  for (const [field, value] of Object.entries(obj)) {
+    const text = Array.isArray(value) ? value.join(" ") : String(value);
+    messages.push(field === "non_field_errors" ? text : `${field}: ${text}`);
+  }
+  return messages.length ? messages.join(" ") : null;
 }
 
 export const api = {
@@ -63,4 +169,61 @@ export const api = {
   logout: () => request<void>("/auth/logout/", { method: "POST" }),
   me: () => request<CurrentUser>("/auth/me/"),
   health: () => request<{ status: string; database: boolean }>("/health/"),
+
+  academicYears: {
+    list: () => request<PaginatedResponse<AcademicYear>>("/academic-years/"),
+    create: (data: Pick<AcademicYear, "label" | "start_date" | "end_date">) =>
+      request<AcademicYear>("/academic-years/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<Pick<AcademicYear, "label" | "start_date" | "end_date">>) =>
+      request<AcademicYear>(`/academic-years/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/academic-years/${id}/`, { method: "DELETE" }),
+    markCurrent: (id: number) => request<AcademicYear>(`/academic-years/${id}/mark-current/`, { method: "POST" }),
+  },
+
+  classes: {
+    list: () => request<PaginatedResponse<SchoolClass>>("/classes/"),
+    create: (data: Pick<SchoolClass, "name" | "order">) =>
+      request<SchoolClass>("/classes/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<Pick<SchoolClass, "name" | "order">>) =>
+      request<SchoolClass>(`/classes/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/classes/${id}/`, { method: "DELETE" }),
+  },
+
+  sections: {
+    list: () => request<PaginatedResponse<Section>>("/sections/"),
+    create: (data: Pick<Section, "name">) => request<Section>("/sections/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<Pick<Section, "name">>) =>
+      request<Section>(`/sections/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/sections/${id}/`, { method: "DELETE" }),
+  },
+
+  subjects: {
+    list: () => request<PaginatedResponse<Subject>>("/subjects/"),
+    create: (data: Pick<Subject, "name" | "code">) =>
+      request<Subject>("/subjects/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<Pick<Subject, "name" | "code">>) =>
+      request<Subject>(`/subjects/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/subjects/${id}/`, { method: "DELETE" }),
+  },
+
+  classSections: {
+    list: () => request<PaginatedResponse<ClassSection>>("/class-sections/"),
+    create: (data: { school_class: number; section: number; academic_year: number; class_teacher?: number | null }) =>
+      request<ClassSection>("/class-sections/", { method: "POST", body: JSON.stringify(data) }),
+    update: (
+      id: number,
+      data: Partial<{ school_class: number; section: number; academic_year: number; class_teacher: number | null }>
+    ) => request<ClassSection>(`/class-sections/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/class-sections/${id}/`, { method: "DELETE" }),
+    addSubject: (id: number, subjectId: number) =>
+      request<ClassSectionSubject>(`/class-sections/${id}/subjects/`, {
+        method: "POST",
+        body: JSON.stringify({ subject: subjectId }),
+      }),
+    removeSubject: (id: number, subjectId: number) =>
+      request<void>(`/class-sections/${id}/subjects/remove/`, {
+        method: "POST",
+        body: JSON.stringify({ subject: subjectId }),
+      }),
+  },
 };
