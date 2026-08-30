@@ -34,16 +34,17 @@ THIRD_PARTY_APPS = [
     "drf_spectacular",
 ]
 
-# Phase 0 only wires up `accounts`, `common`, and `audit`.
-# The remaining domain apps exist as empty scaffolding (per the approved folder
-# structure) but are intentionally NOT added to INSTALLED_APPS yet — they have
-# no models until Phase 1, and adding an app with no models to INSTALLED_APPS
-# is harmless but pointless noise in migrations. They are added one at a time
-# as each domain is actually implemented.
+# Phase 0 wired up `accounts`, `common`, and `audit`. Phase 1.1 adds
+# `academics` (AcademicYear only, so far — Class/Section/Subject land in
+# later Phase 1.x increments). The remaining domain apps still exist as
+# empty scaffolding and are intentionally NOT added here yet — they're added
+# one at a time as each domain is actually implemented.
 LOCAL_APPS = [
     "apps.common",
     "apps.accounts",
     "apps.audit",
+    "apps.academics",
+    "apps.people",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

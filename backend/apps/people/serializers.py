@@ -1,0 +1,132 @@
+from rest_framework import serializers
+
+from apps.people.models import Enrollment, Student
+
+
+class EnrollmentSerializer(serializers.ModelSerializer):
+    """
+    Nested read-only under StudentSerializer's `enrollments`, and also
+    exposed directly at /api/v1/enrollments/ for creating/editing a single
+    enrollment (e.g. promoting a student to a new class-section).
+    """
+
+    school_class_name = serializers.CharField(source="class_section.school_class.name", read_only=True)
+    section_name = serializers.CharField(source="class_section.section.name", read_only=True)
+    academic_year_label = serializers.CharField(source="class_section.academic_year.label", read_only=True)
+    student_name = serializers.CharField(source="student.full_name", read_only=True)
+    student_admission_no = serializers.CharField(source="student.admission_no", read_only=True)
+
+    class Meta:
+        model = Enrollment
+        fields = [
+            "id",
+            "student",
+            "student_name",
+            "student_admission_no",
+            "class_section",
+            "school_class_name",
+            "section_name",
+            "academic_year_label",
+            "roll_no",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "school_class_name",
+            "section_name",
+            "academic_year_label",
+            "student_name",
+            "student_admission_no",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate(self, attrs):
+        student = attrs.get("student", getattr(self.instance, "student", None))
+        class_section = attrs.get("class_section", getattr(self.instance, "class_section", None))
+        roll_no = attrs.get("roll_no", getattr(self.instance, "roll_no", None))
+
+        if class_section and roll_no:
+            roll_conflict = Enrollment.objects.filter(class_section=class_section, roll_no=roll_no)
+            if self.instance:
+                roll_conflict = roll_conflict.exclude(pk=self.instance.pk)
+            if roll_conflict.exists():
+                raise serializers.ValidationError(
+                    {"roll_no": [f"Roll number {roll_no} is already taken in this class-section."]}
+                )
+
+        if student and class_section:
+            student_conflict = Enrollment.objects.filter(student=student, class_section=class_section)
+            if self.instance:
+                student_conflict = student_conflict.exclude(pk=self.instance.pk)
+            if student_conflict.exists():
+                raise serializers.ValidationError(
+                    {"non_field_errors": ["This student is already enrolled in this class-section."]}
+                )
+
+        return attrs
+
+
+class StudentSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(read_only=True)
+    enrollments = EnrollmentSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Student
+        fields = [
+            "id",
+            "user",
+            "admission_no",
+            "first_name",
+            "last_name",
+            "full_name",
+            "dob",
+            "gender",
+            "address",
+            "phone",
+            "admission_date",
+            "enrollments",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "full_name", "enrollments", "created_at", "updated_at"]
+
+
+class StudentListSerializer(serializers.ModelSerializer):
+    """
+    Lighter-weight serializer for the list view — omits the nested
+    enrollments list (which the list page doesn't need) to keep the list
+    endpoint fast as the student count grows.
+    """
+
+    full_name = serializers.CharField(read_only=True)
+    current_class_section = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Student
+        fields = [
+            "id",
+            "admission_no",
+            "first_name",
+            "last_name",
+            "full_name",
+            "dob",
+            "gender",
+            "phone",
+            "current_class_section",
+        ]
+
+    def get_current_class_section(self, obj):
+        enrollment = (
+            obj.enrollments.filter(status="active").select_related("class_section__school_class", "class_section__section", "class_section__academic_year").order_by("-class_section__academic_year__start_date").first()
+        )
+        if not enrollment:
+            return None
+        cs = enrollment.class_section
+        return {
+            "id": cs.id,
+            "label": f"{cs.school_class.name}-{cs.section.name} ({cs.academic_year.label})",
+            "roll_no": enrollment.roll_no,
+        }
