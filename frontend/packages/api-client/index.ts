@@ -83,6 +83,69 @@ export type ClassSection = {
   updated_at: string;
 };
 
+export type StudentCurrentClassSection = {
+  id: number;
+  label: string; // e.g. "Std 10-A (2026-27)"
+  roll_no: number;
+};
+
+export type StudentListItem = {
+  id: number;
+  admission_no: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  dob: string; // "YYYY-MM-DD"
+  gender: "male" | "female" | "other" | "";
+  phone: string;
+  current_class_section: StudentCurrentClassSection | null;
+};
+
+export type Student = {
+  id: number;
+  user: number | null;
+  admission_no: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  dob: string;
+  gender: "male" | "female" | "other" | "";
+  address: string;
+  phone: string;
+  admission_date: string | null;
+  enrollments: Enrollment[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type EnrollmentStatus = "active" | "transferred" | "graduated";
+
+export type Enrollment = {
+  id: number;
+  student: number;
+  student_name: string;
+  student_admission_no: string;
+  class_section: number;
+  school_class_name: string;
+  section_name: string;
+  academic_year_label: string;
+  roll_no: number;
+  status: EnrollmentStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StudentWritePayload = {
+  admission_no: string;
+  first_name: string;
+  last_name: string;
+  dob: string;
+  gender?: "male" | "female" | "other" | "";
+  address?: string;
+  phone?: string;
+  admission_date?: string | null;
+};
+
 export type PaginatedResponse<T> = {
   count: number;
   next: string | null;
@@ -101,6 +164,13 @@ export class ApiError extends Error {
     this.status = status;
     this.body = body;
   }
+}
+
+function toQueryString(params: Record<string, string | number | undefined | null>): string {
+  const usable = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  if (usable.length === 0) return "";
+  const search = new URLSearchParams(usable.map(([k, v]) => [k, String(v)]));
+  return `?${search.toString()}`;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -161,6 +231,24 @@ function extractErrorMessage(body: unknown): string | null {
     messages.push(field === "non_field_errors" ? text : `${field}: ${text}`);
   }
   return messages.length ? messages.join(" ") : null;
+}
+
+// For following a paginated response's `next`/`previous` URLs directly
+// (DRF returns full absolute URLs for those, already including API_BASE_URL).
+async function requestAbsolute<T>(url: string): Promise<T> {
+  const response = await fetch(url, { credentials: "include" });
+  if (!response.ok) {
+    let body: unknown = null;
+    let detail = response.statusText;
+    try {
+      body = await response.json();
+      detail = extractErrorMessage(body) ?? detail;
+    } catch {
+      // no JSON body
+    }
+    throw new ApiError(response.status, body, detail);
+  }
+  return response.json();
 }
 
 export const api = {
@@ -225,5 +313,27 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ subject: subjectId }),
       }),
+  },
+
+  students: {
+    list: (params?: { search?: string; gender?: string; class_section?: number; ordering?: string }) =>
+      request<PaginatedResponse<StudentListItem>>(`/students/${toQueryString(params ?? {})}`),
+    listPage: (url: string) => requestAbsolute<PaginatedResponse<StudentListItem>>(url),
+    retrieve: (id: number) => request<Student>(`/students/${id}/`),
+    create: (data: StudentWritePayload) =>
+      request<Student>("/students/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<StudentWritePayload>) =>
+      request<Student>(`/students/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/students/${id}/`, { method: "DELETE" }),
+  },
+
+  enrollments: {
+    list: (params?: { student?: number; class_section?: number; status?: string }) =>
+      request<PaginatedResponse<Enrollment>>(`/enrollments/${toQueryString(params ?? {})}`),
+    create: (data: { student: number; class_section: number; roll_no: number; status?: EnrollmentStatus }) =>
+      request<Enrollment>("/enrollments/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<{ class_section: number; roll_no: number; status: EnrollmentStatus }>) =>
+      request<Enrollment>(`/enrollments/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/enrollments/${id}/`, { method: "DELETE" }),
   },
 };

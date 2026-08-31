@@ -12,11 +12,24 @@ class HasModulePermission(BasePermission):
         class MarksViewSet(viewsets.ModelViewSet):
             permission_classes = [HasModulePermission]
             module_key = "marks"
-            action_map = {
+            permission_action_map = {
                 "list": "view", "retrieve": "view",
                 "create": "create", "update": "edit", "partial_update": "edit",
                 "destroy": "delete",
             }
+
+    IMPORTANT — do not name this attribute `action_map`: DRF's own
+    `ViewSetMixin` sets an *instance* attribute called exactly `action_map`
+    (an HTTP-method -> action-name dict, e.g. {"post": "create"}, assigned in
+    `.as_view(actions)` by the router) which silently shadows a same-named
+    class attribute. This class deliberately uses `permission_action_map` to
+    avoid that collision — this was a real latent bug in an earlier version
+    of this class, caught by apps/academics's tests (the first real ViewSet
+    to exercise this code path; the Phase 0 stub endpoint was a plain
+    APIView and never hit this branch at all). See
+    docs/handoffs/phase-1.1-academic-years.md for the full story. (It
+    briefly regressed again during a merge on 2026-08-31 and was restored
+    here — see docs/handoffs/phase-1.2-2.1-foundation-fix.md.)
 
     Superusers (is_superuser=True) always pass — an escape hatch for the
     Admin role / initial setup, matching the "Admin: full access" row in every
@@ -41,13 +54,14 @@ class HasModulePermission(BasePermission):
         if not module_key:
             return False  # deny by default — a view must explicitly declare its module
 
-        # ViewSets: resolve via action_map + DRF's self.action (list/retrieve/create/...).
-        # Plain APIViews (e.g. a one-off stub/report endpoint): declare `required_action`
-        # directly instead, since they have no `.action` attribute.
+        # ViewSets: resolve via permission_action_map + DRF's self.action
+        # (list/retrieve/create/...). Plain APIViews (e.g. a one-off stub/
+        # report endpoint): declare `required_action` directly instead,
+        # since they have no `.action` attribute at all.
         resolved_action = getattr(view, "required_action", None)
         if resolved_action is None:
-            action_map = getattr(view, "action_map", {})
-            resolved_action = action_map.get(getattr(view, "action", None))
+            permission_action_map = getattr(view, "permission_action_map", {})
+            resolved_action = permission_action_map.get(getattr(view, "action", None))
         if not resolved_action:
             return False
 
