@@ -146,6 +146,52 @@ export type StudentWritePayload = {
   admission_date?: string | null;
 };
 
+export type TeacherAssignment = {
+  id: number;
+  teacher: number;
+  teacher_name: string;
+  class_section_subject: number;
+  subject_name: string;
+  subject_code: string;
+  school_class_name: string;
+  section_name: string;
+  academic_year_label: string;
+  created_at: string;
+};
+
+export type TeacherListItem = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  phone: string;
+  email: string;
+  joined_date: string | null;
+  assignment_count: number;
+};
+
+export type Teacher = {
+  id: number;
+  user: number | null;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  phone: string;
+  email: string;
+  joined_date: string | null;
+  assignments: TeacherAssignment[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type TeacherWritePayload = {
+  first_name: string;
+  last_name: string;
+  phone?: string;
+  email?: string;
+  joined_date?: string | null;
+};
+
 export type PaginatedResponse<T> = {
   count: number;
   next: string | null;
@@ -335,5 +381,25 @@ export const api = {
     update: (id: number, data: Partial<{ class_section: number; roll_no: number; status: EnrollmentStatus }>) =>
       request<Enrollment>(`/enrollments/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
     remove: (id: number) => request<void>(`/enrollments/${id}/`, { method: "DELETE" }),
+  },
+
+  teachers: {
+    list: (params?: { search?: string; class_section?: number; ordering?: string }) =>
+      request<PaginatedResponse<TeacherListItem>>(`/teachers/${toQueryString(params ?? {})}`),
+    listPage: (url: string) => requestAbsolute<PaginatedResponse<TeacherListItem>>(url),
+    retrieve: (id: number) => request<Teacher>(`/teachers/${id}/`),
+    create: (data: TeacherWritePayload) =>
+      request<Teacher>("/teachers/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<TeacherWritePayload>) =>
+      request<Teacher>(`/teachers/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/teachers/${id}/`, { method: "DELETE" }),
+  },
+
+  teacherAssignments: {
+    list: (params?: { teacher?: number; class_section_subject?: number }) =>
+      request<PaginatedResponse<TeacherAssignment>>(`/teacher-assignments/${toQueryString(params ?? {})}`),
+    create: (data: { teacher: number; class_section_subject: number }) =>
+      request<TeacherAssignment>("/teacher-assignments/", { method: "POST", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/teacher-assignments/${id}/`, { method: "DELETE" }),
   },
 };

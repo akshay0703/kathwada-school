@@ -72,6 +72,99 @@ class Student(TimeStampedModel, SoftDeleteModel):
         return f"{self.first_name} {self.last_name}"
 
 
+class Teacher(TimeStampedModel, SoftDeleteModel):
+    """
+    Teacher profile — see docs/database-schema.md's ERD (`USER ||--o| TEACHER`)
+    and docs/prototype-analysis.md §3.2: "Teacher — id, user_id, first_name,
+    last_name, phone, email, joined_date." Field list transcribed directly
+    from there, same as Student's fields were.
+
+    `user` is nullable, same reasoning as `Student.user`: not every Teacher
+    necessarily has login access on day one (explicitly confirmed assumption
+    in prototype-analysis.md's "Contradictions / risks" section, which
+    applies to Teacher/Guardian/Staff the same way it does to Student).
+
+    `email` here is the teacher's own contact-info field (per the ERD's
+    explicit field list), separate from `user.email` (the login identity) —
+    a Teacher profile can exist, and be edited, before or without ever
+    having a User login attached.
+
+    Deliberately NOT changed by this milestone: `ClassSection.class_teacher`
+    (apps/academics/models.py) still points at `accounts.User`, not at this
+    Teacher model, even though that field's docstring flags it as an interim
+    choice "expected to be swapped to a Teacher-profile FK once that module
+    exists." Making that swap now would require an additional migration
+    touching Milestone 1's already-shipped, already-tested ClassSection
+    model/serializer/view/frontend — out of scope for "implement Teacher
+    Management as one focused batch, do not redesign existing architecture."
+    Flagged here explicitly as a known, deliberate follow-up, not silently
+    ignored.
+
+    Soft delete only, same historical-integrity reasoning as every other
+    model in this codebase — a "deleted" teacher's TeacherAssignment history
+    (and eventually Marks entered_by, Attendance marked_by, etc.) must
+    remain intact and queryable.
+    """
+
+    user = models.OneToOneField(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="teacher_profile",
+    )
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    phone = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
+    joined_date = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["first_name", "last_name"]
+
+    def __str__(self):
+        return self.full_name
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
+
+
+class TeacherAssignment(TimeStampedModel):
+    """
+    Join table: which Teacher teaches which (ClassSection, Subject) pairing
+    — the ERD's "TEACHER }o--o{ CLASS_SECTION_SUBJECT: assigned to (via
+    TEACHER_ASSIGNMENT)" relationship, and prototype-analysis.md §3.2's
+    "TeacherAssignment — teacher_id, class_section_subject_id." This is what
+    scopes a Teacher's future Marks/Attendance access to only their assigned
+    classes/subjects (prototype-analysis.md's permission notes) — that
+    scoping enforcement itself is not implemented yet (it belongs to the
+    Marks/Attendance modules, out of scope here), but this table is the
+    foundation it will be built on, per the approved schema.
+
+    Deliberately not soft-deletable itself, same reasoning as
+    ClassSectionSubject: it's a pure association row, not a historical fact
+    worth preserving after removal — removing an assignment is a real
+    delete; the Teacher and ClassSectionSubject rows it links remain intact.
+    """
+
+    teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name="assignments")
+    class_section_subject = models.ForeignKey(
+        "academics.ClassSectionSubject", on_delete=models.CASCADE, related_name="teacher_assignments"
+    )
+
+    class Meta:
+        ordering = ["teacher__first_name", "teacher__last_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["teacher", "class_section_subject"], name="people_unique_teacher_assignment"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.teacher.full_name} — {self.class_section_subject}"
+
+
 class EnrollmentStatus(models.TextChoices):
     ACTIVE = "active", "Active"
     TRANSFERRED = "transferred", "Transferred"

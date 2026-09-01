@@ -1,8 +1,15 @@
 from rest_framework import filters, viewsets
 
 from apps.accounts.permissions import HasModulePermission
-from apps.people.models import Enrollment, Student
-from apps.people.serializers import EnrollmentSerializer, StudentListSerializer, StudentSerializer
+from apps.people.models import Enrollment, Student, Teacher, TeacherAssignment
+from apps.people.serializers import (
+    EnrollmentSerializer,
+    StudentListSerializer,
+    StudentSerializer,
+    TeacherAssignmentSerializer,
+    TeacherListSerializer,
+    TeacherSerializer,
+)
 
 STANDARD_ACTION_MAP = {
     "list": "view",
@@ -127,3 +134,106 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         instance.soft_delete()
+
+
+class TeacherViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/teachers/ — permissions per the "Teachers" matrix row
+    (docs/prototype-analysis.md §3): Admin VCEDX, Principal VEX, Staff V,
+    Teacher V(own record)+E(own record — field-level restriction to "own
+    contact info only" is not enforced yet, same kind of documented gap as
+    Student's row-level scoping), Student/Parent no access at all (no
+    RolePermission rows for those roles on this module, so they 403 before
+    ever reaching get_queryset).
+    """
+
+    queryset = Teacher.objects.all().order_by("first_name", "last_name")
+    permission_classes = [HasModulePermission]
+    module_key = "teachers"
+    permission_action_map = STANDARD_ACTION_MAP
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["first_name", "last_name", "phone", "email"]
+    ordering_fields = ["first_name", "last_name", "joined_date", "created_at"]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return TeacherListSerializer
+        return TeacherSerializer
+
+    def get_queryset(self):
+        qs = Teacher.objects.all().prefetch_related(
+            "assignments__class_section_subject__subject",
+            "assignments__class_section_subject__class_section__school_class",
+            "assignments__class_section_subject__class_section__section",
+            "assignments__class_section_subject__class_section__academic_year",
+        )
+        user = self.request.user
+        if not user or not user.is_authenticated:
+            return qs.none()
+        if not user.is_superuser:
+            role_name = user.role.name if user.role else None
+            if role_name in ("Admin", "Principal", "Staff"):
+                pass
+            elif role_name == "Teacher":
+                qs = qs.filter(user=user)
+            else:
+                # Student/Parent: no RolePermission rows exist for this
+                # module at all per the matrix, so this branch is a
+                # deny-by-default backstop, not the primary gate.
+                return qs.none()
+
+        class_section_id = self.request.query_params.get("class_section")
+        if class_section_id:
+            qs = qs.filter(assignments__class_section_subject__class_section_id=class_section_id)
+        return qs.distinct()
+
+    def perform_destroy(self, instance):
+        instance.soft_delete()
+
+
+class TeacherAssignmentViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/teacher-assignments/ — same "Teachers" module permissions,
+    since assigning a teacher to a class-section subject is part of teacher
+    management, not a separate module in the approved matrix (mirrors how
+    Enrollment reuses the "students" module_key).
+    """
+
+    queryset = TeacherAssignment.objects.select_related(
+        "teacher",
+        "class_section_subject__subject",
+        "class_section_subject__class_section__school_class",
+        "class_section_subject__class_section__section",
+        "class_section_subject__class_section__academic_year",
+    ).all()
+    serializer_class = TeacherAssignmentSerializer
+    permission_classes = [HasModulePermission]
+    module_key = "teachers"
+    permission_action_map = STANDARD_ACTION_MAP
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if not user or not user.is_authenticated:
+            return qs.none()
+        if not user.is_superuser:
+            role_name = user.role.name if user.role else None
+            if role_name in ("Admin", "Principal", "Staff"):
+                pass
+            elif role_name == "Teacher":
+                qs = qs.filter(teacher__user=user)
+            else:
+                return qs.none()
+
+        teacher_id = self.request.query_params.get("teacher")
+        if teacher_id:
+            qs = qs.filter(teacher_id=teacher_id)
+        class_section_subject_id = self.request.query_params.get("class_section_subject")
+        if class_section_subject_id:
+            qs = qs.filter(class_section_subject_id=class_section_subject_id)
+        return qs
+
+    def perform_destroy(self, instance):
+        # Pure association row — a real delete, not a soft delete, same as
+        # ClassSectionSubject (see TeacherAssignment's model docstring).
+        instance.delete()

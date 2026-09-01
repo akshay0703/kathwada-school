@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.people.models import Enrollment, Student
+from apps.people.models import Enrollment, Student, Teacher, TeacherAssignment
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
@@ -130,3 +130,101 @@ class StudentListSerializer(serializers.ModelSerializer):
             "label": f"{cs.school_class.name}-{cs.section.name} ({cs.academic_year.label})",
             "roll_no": enrollment.roll_no,
         }
+
+
+class TeacherAssignmentSerializer(serializers.ModelSerializer):
+    """
+    Nested read-only under TeacherSerializer's `assignments`, and also
+    exposed directly at /api/v1/teacher-assignments/ for assigning/
+    unassigning a teacher to a (class-section, subject) pairing.
+    """
+
+    teacher_name = serializers.CharField(source="teacher.full_name", read_only=True)
+    subject_name = serializers.CharField(source="class_section_subject.subject.name", read_only=True)
+    subject_code = serializers.CharField(source="class_section_subject.subject.code", read_only=True)
+    school_class_name = serializers.CharField(
+        source="class_section_subject.class_section.school_class.name", read_only=True
+    )
+    section_name = serializers.CharField(source="class_section_subject.class_section.section.name", read_only=True)
+    academic_year_label = serializers.CharField(
+        source="class_section_subject.class_section.academic_year.label", read_only=True
+    )
+
+    class Meta:
+        model = TeacherAssignment
+        fields = [
+            "id",
+            "teacher",
+            "teacher_name",
+            "class_section_subject",
+            "subject_name",
+            "subject_code",
+            "school_class_name",
+            "section_name",
+            "academic_year_label",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "teacher_name",
+            "subject_name",
+            "subject_code",
+            "school_class_name",
+            "section_name",
+            "academic_year_label",
+            "created_at",
+        ]
+
+    def validate(self, attrs):
+        teacher = attrs.get("teacher", getattr(self.instance, "teacher", None))
+        class_section_subject = attrs.get(
+            "class_section_subject", getattr(self.instance, "class_section_subject", None)
+        )
+        if teacher and class_section_subject:
+            conflict = TeacherAssignment.objects.filter(teacher=teacher, class_section_subject=class_section_subject)
+            if self.instance:
+                conflict = conflict.exclude(pk=self.instance.pk)
+            if conflict.exists():
+                raise serializers.ValidationError(
+                    {"non_field_errors": ["This teacher is already assigned to this class-section subject."]}
+                )
+        return attrs
+
+
+class TeacherSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(read_only=True)
+    assignments = TeacherAssignmentSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Teacher
+        fields = [
+            "id",
+            "user",
+            "first_name",
+            "last_name",
+            "full_name",
+            "phone",
+            "email",
+            "joined_date",
+            "assignments",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "full_name", "assignments", "created_at", "updated_at"]
+
+
+class TeacherListSerializer(serializers.ModelSerializer):
+    """
+    Lighter-weight serializer for the list view — omits the nested
+    assignments list, same reasoning as StudentListSerializer.
+    """
+
+    full_name = serializers.CharField(read_only=True)
+    assignment_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Teacher
+        fields = ["id", "first_name", "last_name", "full_name", "phone", "email", "joined_date", "assignment_count"]
+
+    def get_assignment_count(self, obj):
+        return obj.assignments.count()
