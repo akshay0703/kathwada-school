@@ -84,6 +84,23 @@ export default function DashboardPage() {
         </Link>
 
         <Link
+          href="/exams"
+          style={{
+            display: "block",
+            border: "1px solid var(--line)",
+            borderRadius: "8px",
+            padding: "16px 20px",
+            textDecoration: "none",
+            minWidth: "200px",
+          }}
+        >
+          <div style={{ color: "var(--navy-primary)", fontWeight: 600, fontSize: "15px" }}>Exams & Marks</div>
+          <div style={{ color: "var(--ink)", opacity: 0.65, fontSize: "13px", marginTop: "4px" }}>
+            Manage exams and enter subject-wise marks
+          </div>
+        </Link>
+
+        <Link
           href="/attendance"
           style={{
             display: "block",

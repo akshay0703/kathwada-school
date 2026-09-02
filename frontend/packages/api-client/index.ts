@@ -212,6 +212,72 @@ export type AttendanceRecord = {
   updated_at: string;
 };
 
+export type Exam = {
+  id: number;
+  academic_year: number;
+  academic_year_label: string;
+  code: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  sequence_order: number;
+  exam_subjects: ExamSubject[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type ExamListItem = {
+  id: number;
+  academic_year: number;
+  academic_year_label: string;
+  code: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  sequence_order: number;
+  subject_count: number;
+};
+
+export type ExamWritePayload = {
+  academic_year: number;
+  code: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  sequence_order?: number;
+};
+
+export type ExamSubject = {
+  id: number;
+  exam: number;
+  exam_name: string;
+  class_section: number;
+  school_class_name: string;
+  section_name: string;
+  subject: number;
+  subject_name: string;
+  subject_code: string;
+  max_marks: string;
+};
+
+export type Mark = {
+  id: number;
+  student: number;
+  student_name: string;
+  student_admission_no: string;
+  exam_subject: number;
+  exam_name: string;
+  subject_name: string;
+  subject_code: string;
+  max_marks: string;
+  marks_obtained: string;
+  entered_by: number | null;
+  entered_by_email: string | null;
+  entered_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PaginatedResponse<T> = {
   count: number;
   next: string | null;
@@ -431,5 +497,33 @@ export const api = {
     remove: (id: number) => request<void>(`/attendance/${id}/`, { method: "DELETE" }),
     bulkMark: (data: { class_section: number; date: string; records: { student: number; status: AttendanceStatus }[] }) =>
       request<AttendanceRecord[]>("/attendance/bulk-mark/", { method: "POST", body: JSON.stringify(data) }),
+  },
+
+  exams: {
+    list: (params?: { academic_year?: number }) =>
+      request<PaginatedResponse<ExamListItem>>(`/exams/${toQueryString(params ?? {})}`),
+    retrieve: (id: number) => request<Exam>(`/exams/${id}/`),
+    create: (data: ExamWritePayload) => request<Exam>("/exams/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<ExamWritePayload>) =>
+      request<Exam>(`/exams/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/exams/${id}/`, { method: "DELETE" }),
+  },
+
+  examSubjects: {
+    list: (params?: { exam?: number; class_section?: number }) =>
+      request<PaginatedResponse<ExamSubject>>(`/exam-subjects/${toQueryString(params ?? {})}`),
+    create: (data: { exam: number; class_section: number; subject: number; max_marks: string }) =>
+      request<ExamSubject>("/exam-subjects/", { method: "POST", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/exam-subjects/${id}/`, { method: "DELETE" }),
+  },
+
+  marks: {
+    list: (params?: { exam_subject?: number; exam?: number; student?: number }) =>
+      request<PaginatedResponse<Mark>>(`/marks/${toQueryString(params ?? {})}`),
+    update: (id: number, data: { marks_obtained: string }) =>
+      request<Mark>(`/marks/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/marks/${id}/`, { method: "DELETE" }),
+    bulkSave: (data: { exam_subject: number; records: { student: number; marks_obtained: string }[] }) =>
+      request<Mark[]>("/marks/bulk-save/", { method: "POST", body: JSON.stringify(data) }),
   },
 };
