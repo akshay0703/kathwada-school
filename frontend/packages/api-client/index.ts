@@ -192,6 +192,26 @@ export type TeacherWritePayload = {
   joined_date?: string | null;
 };
 
+export type AttendanceStatus = "present" | "absent" | "late" | "excused";
+
+export type AttendanceRecord = {
+  id: number;
+  student: number;
+  student_name: string;
+  student_admission_no: string;
+  class_section: number;
+  school_class_name: string;
+  section_name: string;
+  academic_year_label: string;
+  date: string; // "YYYY-MM-DD"
+  status: AttendanceStatus;
+  marked_by: number | null;
+  marked_by_email: string | null;
+  marked_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PaginatedResponse<T> = {
   count: number;
   next: string | null;
@@ -401,5 +421,15 @@ export const api = {
     create: (data: { teacher: number; class_section_subject: number }) =>
       request<TeacherAssignment>("/teacher-assignments/", { method: "POST", body: JSON.stringify(data) }),
     remove: (id: number) => request<void>(`/teacher-assignments/${id}/`, { method: "DELETE" }),
+  },
+
+  attendance: {
+    list: (params?: { class_section?: number; date?: string; student?: number }) =>
+      request<PaginatedResponse<AttendanceRecord>>(`/attendance/${toQueryString(params ?? {})}`),
+    update: (id: number, data: { status: AttendanceStatus }) =>
+      request<AttendanceRecord>(`/attendance/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/attendance/${id}/`, { method: "DELETE" }),
+    bulkMark: (data: { class_section: number; date: string; records: { student: number; status: AttendanceStatus }[] }) =>
+      request<AttendanceRecord[]>("/attendance/bulk-mark/", { method: "POST", body: JSON.stringify(data) }),
   },
 };
