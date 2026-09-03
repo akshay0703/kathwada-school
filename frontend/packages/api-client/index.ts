@@ -258,6 +258,7 @@ export type ExamSubject = {
   subject_name: string;
   subject_code: string;
   max_marks: string;
+  passing_marks: string | null;
 };
 
 export type Mark = {
@@ -276,6 +277,39 @@ export type Mark = {
   entered_at: string;
   created_at: string;
   updated_at: string;
+};
+
+export type MarksheetSubjectRow = {
+  exam_subject: number;
+  subject_name: string;
+  subject_code: string;
+  max_marks: string;
+  passing_marks: string | null;
+  marks_obtained: string | null;
+  passed: boolean | null;
+};
+
+export type Marksheet = {
+  student: { id: number; full_name: string; admission_no: string };
+  exam: { id: number; code: string; name: string };
+  academic_year_label: string;
+  class_section_label: string;
+  roll_no: number;
+  subjects: MarksheetSubjectRow[];
+  total_obtained: string;
+  total_max: string;
+  percentage: number | null;
+  all_marks_entered: boolean;
+  overall_result: "pass" | "fail" | null;
+};
+
+export type ClassMarksheetRow = {
+  student: { id: number; full_name: string; admission_no: string };
+  total_obtained: string;
+  total_max: string;
+  percentage: number | null;
+  all_marks_entered: boolean;
+  overall_result: "pass" | "fail" | null;
 };
 
 export type PaginatedResponse<T> = {
@@ -525,5 +559,9 @@ export const api = {
     remove: (id: number) => request<void>(`/marks/${id}/`, { method: "DELETE" }),
     bulkSave: (data: { exam_subject: number; records: { student: number; marks_obtained: string }[] }) =>
       request<Mark[]>("/marks/bulk-save/", { method: "POST", body: JSON.stringify(data) }),
+    marksheet: (params: { student: number; exam: number }) =>
+      request<Marksheet>(`/marks/marksheet/${toQueryString(params)}`),
+    classMarksheet: (params: { class_section: number; exam: number }) =>
+      request<ClassMarksheetRow[]>(`/marks/class-marksheet/${toQueryString(params)}`),
   },
 };

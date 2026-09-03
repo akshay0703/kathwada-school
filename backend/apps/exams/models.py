@@ -59,7 +59,15 @@ class ExamSubject(TimeStampedModel):
     flattened stand-in for the approved schema's
     `ExamComponent + ExamComponentSubjectConfig` pair (see Exam's
     docstring). Carries `max_marks`, which every `Mark` row against this
-    combination is validated against.
+    combination is validated against, and an optional `passing_marks` —
+    added for the Report Card / Marksheet MVP batch to enable per-subject
+    pass/fail without duplicating anything already in `Mark`: this is
+    genuinely a configuration property of the exam/subject combination
+    (the approved schema's `ExamComponentSubjectConfig.passing_marks`), not
+    student data, so it belongs here rather than on `Mark`. Nullable/
+    optional so exams with no passing threshold (or exams configured
+    before this field existed) simply omit pass/fail on the marksheet
+    rather than defaulting to some arbitrary threshold.
 
     Deliberately not soft-deletable, same reasoning as ClassSectionSubject/
     TeacherAssignment: a pure configuration row, not a historical fact
@@ -72,6 +80,17 @@ class ExamSubject(TimeStampedModel):
     )
     subject = models.ForeignKey("academics.Subject", on_delete=models.PROTECT, related_name="exam_subjects")
     max_marks = models.DecimalField(max_digits=6, decimal_places=2, validators=[MinValueValidator(1)])
+    passing_marks = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "Optional. When set, enables pass/fail on the marksheet for this "
+            "subject. Left null for exams where no passing threshold applies."
+        ),
+    )
 
     class Meta:
         ordering = ["exam", "class_section", "subject"]

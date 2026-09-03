@@ -29,6 +29,7 @@ class ExamSubjectSerializer(serializers.ModelSerializer):
             "subject_name",
             "subject_code",
             "max_marks",
+            "passing_marks",
         ]
         read_only_fields = ["id", "exam_name", "school_class_name", "section_name", "subject_name", "subject_code"]
 
