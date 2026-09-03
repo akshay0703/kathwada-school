@@ -312,6 +312,64 @@ export type ClassMarksheetRow = {
   overall_result: "pass" | "fail" | null;
 };
 
+export type FeeStructure = {
+  id: number;
+  class_section: number;
+  school_class_name: string;
+  section_name: string;
+  academic_year: number;
+  academic_year_label: string;
+  fee_head: string;
+  amount: string;
+  due_date: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FeeInvoiceStatus = "pending" | "partial" | "paid";
+
+export type FeePayment = {
+  id: number;
+  fee_invoice: number;
+  amount: string;
+  paid_at: string;
+  method: "cash" | "cheque" | "online" | "card" | "other";
+  recorded_by: number | null;
+  recorded_by_email: string | null;
+  created_at: string;
+};
+
+export type FeeInvoice = {
+  id: number;
+  student: number;
+  student_name: string;
+  student_admission_no: string;
+  fee_structure: number;
+  fee_head: string;
+  due_date: string;
+  academic_year_label: string;
+  amount_due: string;
+  amount_paid: string;
+  balance: string;
+  status: FeeInvoiceStatus;
+  payments: FeePayment[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type FeeInvoiceListItem = {
+  id: number;
+  student: number;
+  student_name: string;
+  student_admission_no: string;
+  fee_structure: number;
+  fee_head: string;
+  amount_due: string;
+  amount_paid: string;
+  balance: string;
+  status: FeeInvoiceStatus;
+};
+
 export type PaginatedResponse<T> = {
   count: number;
   next: string | null;
@@ -563,5 +621,28 @@ export const api = {
       request<Marksheet>(`/marks/marksheet/${toQueryString(params)}`),
     classMarksheet: (params: { class_section: number; exam: number }) =>
       request<ClassMarksheetRow[]>(`/marks/class-marksheet/${toQueryString(params)}`),
+  },
+
+  feeStructures: {
+    list: (params?: { class_section?: number; academic_year?: number }) =>
+      request<PaginatedResponse<FeeStructure>>(`/fee-structures/${toQueryString(params ?? {})}`),
+    create: (data: { class_section: number; academic_year: number; fee_head: string; amount: string; due_date: string }) =>
+      request<FeeStructure>("/fee-structures/", { method: "POST", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/fee-structures/${id}/`, { method: "DELETE" }),
+  },
+
+  feeInvoices: {
+    list: (params?: { student?: number; fee_structure?: number; status?: string }) =>
+      request<PaginatedResponse<FeeInvoiceListItem>>(`/fee-invoices/${toQueryString(params ?? {})}`),
+    retrieve: (id: number) => request<FeeInvoice>(`/fee-invoices/${id}/`),
+    create: (data: { student: number; fee_structure: number; amount_due?: string }) =>
+      request<FeeInvoice>("/fee-invoices/", { method: "POST", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/fee-invoices/${id}/`, { method: "DELETE" }),
+  },
+
+  feePayments: {
+    create: (data: { fee_invoice: number; amount: string; paid_at: string; method: string }) =>
+      request<FeePayment>("/fee-payments/", { method: "POST", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/fee-payments/${id}/`, { method: "DELETE" }),
   },
 };
