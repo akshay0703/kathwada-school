@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.people.models import Enrollment, Student, Teacher, TeacherAssignment
+from apps.people.models import Enrollment, Guardian, Student, StudentGuardian, Teacher, TeacherAssignment
 
 
 @admin.register(Student)
@@ -33,3 +33,21 @@ class TeacherAdmin(admin.ModelAdmin):
 class TeacherAssignmentAdmin(admin.ModelAdmin):
     list_display = ["teacher", "class_section_subject"]
     search_fields = ["teacher__first_name", "teacher__last_name"]
+
+
+class StudentGuardianInline(admin.TabularInline):
+    model = StudentGuardian
+    extra = 0
+
+
+@admin.register(Guardian)
+class GuardianAdmin(admin.ModelAdmin):
+    list_display = ["name", "phone", "email", "relationship", "deleted_at"]
+    search_fields = ["name", "phone", "email"]
+    inlines = [StudentGuardianInline]
+
+
+@admin.register(StudentGuardian)
+class StudentGuardianAdmin(admin.ModelAdmin):
+    list_display = ["student", "guardian", "is_primary_contact"]
+    search_fields = ["student__admission_no", "student__first_name", "guardian__name"]

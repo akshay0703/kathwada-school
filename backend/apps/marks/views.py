@@ -33,17 +33,17 @@ class MarkViewSet(viewsets.ModelViewSet):
       TeacherAssignment (docs/permissions.md names Marks explicitly for
       this exact scoping rule).
     - Student: sees only their own marks (via `student.user`).
+    - Parent: sees only their linked children's marks (via
+      `StudentGuardian`, resolved by `guardian_child_student_ids()`).
     - Admin/Principal/superuser: full queryset. Staff: no RolePermission
       rows on this module at all, so they 403 before reaching get_queryset.
 
     Deliberately NOT yet implemented (documented, not silently skipped):
-    - Parent "V (own child)" needs `StudentGuardian`, which doesn't exist
-      yet — Parents get an empty queryset rather than an error.
     - No draft->publish gate: checked directly against
       apps/accounts/management/commands/seed_permissions.py, the "marks"
       module row has no PUBLISH action at all (only report_cards/
       website_cms do), so Student/Parent's View is unconditional once
-      scoped to their own record.
+      scoped to their own/linked record.
     """
 
     queryset = Mark.objects.select_related(
@@ -67,9 +67,10 @@ class MarkViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(exam_subject__class_section__in=_teacher_class_section_ids(user))
             elif role_name == "Student":
                 qs = qs.filter(student__user=user)
+            elif role_name == "Parent":
+                qs = qs.filter(student_id__in=_guardian_child_student_ids(user))
             else:
-                # Staff (no rows on this module) / Parent (StudentGuardian
-                # doesn't exist yet): deny by default.
+                # Staff: no rows on this module at all.
                 return qs.none()
 
         exam_subject_id = self.request.query_params.get("exam_subject")
@@ -220,6 +221,12 @@ def _teacher_class_section_ids(user):
     )
 
 
+def _guardian_child_student_ids(user):
+    from apps.people.models import guardian_child_student_ids
+
+    return guardian_child_student_ids(user)
+
+
 def _class_section_id_for_exam_subject(exam_subject_id):
     from apps.exams.models import ExamSubject
 
@@ -251,8 +258,11 @@ def _check_marksheet_access(user, student):
         if student.user_id == user.id:
             return None
         return Response({"detail": "You do not have permission to view this."}, status=status.HTTP_403_FORBIDDEN)
-    # Staff (no rows on the "marks" module at all) / Parent (StudentGuardian
-    # doesn't exist yet): deny by default.
+    if role_name == "Parent":
+        if student.id in _guardian_child_student_ids(user):
+            return None
+        return Response({"detail": "You do not have permission to view this."}, status=status.HTTP_403_FORBIDDEN)
+    # Staff: no rows on the "marks" module at all.
     return Response({"detail": "You do not have permission to view this."}, status=status.HTTP_403_FORBIDDEN)
 
 

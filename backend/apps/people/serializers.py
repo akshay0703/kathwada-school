@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.people.models import Enrollment, Student, Teacher, TeacherAssignment
+from apps.people.models import Enrollment, Guardian, Student, StudentGuardian, Teacher, TeacherAssignment
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
@@ -228,3 +228,55 @@ class TeacherListSerializer(serializers.ModelSerializer):
 
     def get_assignment_count(self, obj):
         return obj.assignments.count()
+
+
+class StudentGuardianSerializer(serializers.ModelSerializer):
+    """
+    Nested read-only under GuardianSerializer's `student_links`, and also
+    exposed directly at /api/v1/student-guardians/ for linking/unlinking a
+    guardian to a student.
+    """
+
+    student_name = serializers.CharField(source="student.full_name", read_only=True)
+    student_admission_no = serializers.CharField(source="student.admission_no", read_only=True)
+    guardian_name = serializers.CharField(source="guardian.name", read_only=True)
+
+    class Meta:
+        model = StudentGuardian
+        fields = ["id", "student", "student_name", "student_admission_no", "guardian", "guardian_name", "is_primary_contact"]
+        read_only_fields = ["id", "student_name", "student_admission_no", "guardian_name"]
+
+    def validate(self, attrs):
+        student = attrs.get("student", getattr(self.instance, "student", None))
+        guardian = attrs.get("guardian", getattr(self.instance, "guardian", None))
+        if student and guardian:
+            conflict = StudentGuardian.objects.filter(student=student, guardian=guardian)
+            if self.instance:
+                conflict = conflict.exclude(pk=self.instance.pk)
+            if conflict.exists():
+                raise serializers.ValidationError(
+                    {"non_field_errors": [f"{guardian.name} is already linked to {student.full_name}."]}
+                )
+        return attrs
+
+
+class GuardianSerializer(serializers.ModelSerializer):
+    student_links = StudentGuardianSerializer(source="student_guardians", many=True, read_only=True)
+
+    class Meta:
+        model = Guardian
+        fields = ["id", "user", "name", "phone", "email", "relationship", "student_links", "created_at", "updated_at"]
+        read_only_fields = ["id", "student_links", "created_at", "updated_at"]
+
+
+class GuardianListSerializer(serializers.ModelSerializer):
+    """Lighter-weight list serializer, omitting the nested student_links."""
+
+    child_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Guardian
+        fields = ["id", "name", "phone", "email", "relationship", "child_count"]
+
+    def get_child_count(self, obj):
+        return obj.student_guardians.count()

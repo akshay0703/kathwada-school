@@ -370,6 +370,46 @@ export type FeeInvoiceListItem = {
   status: FeeInvoiceStatus;
 };
 
+export type GuardianRelationship = "father" | "mother" | "guardian" | "other";
+
+export type StudentGuardianLink = {
+  id: number;
+  student: number;
+  student_name: string;
+  student_admission_no: string;
+  guardian: number;
+  guardian_name: string;
+  is_primary_contact: boolean;
+};
+
+export type Guardian = {
+  id: number;
+  user: number | null;
+  name: string;
+  phone: string;
+  email: string;
+  relationship: GuardianRelationship | "";
+  student_links: StudentGuardianLink[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type GuardianListItem = {
+  id: number;
+  name: string;
+  phone: string;
+  email: string;
+  relationship: GuardianRelationship | "";
+  child_count: number;
+};
+
+export type GuardianWritePayload = {
+  name: string;
+  phone?: string;
+  email?: string;
+  relationship?: GuardianRelationship | "";
+};
+
 export type PaginatedResponse<T> = {
   count: number;
   next: string | null;
@@ -644,5 +684,24 @@ export const api = {
     create: (data: { fee_invoice: number; amount: string; paid_at: string; method: string }) =>
       request<FeePayment>("/fee-payments/", { method: "POST", body: JSON.stringify(data) }),
     remove: (id: number) => request<void>(`/fee-payments/${id}/`, { method: "DELETE" }),
+  },
+
+  guardians: {
+    list: (params?: { search?: string }) =>
+      request<PaginatedResponse<GuardianListItem>>(`/guardians/${toQueryString(params ?? {})}`),
+    retrieve: (id: number) => request<Guardian>(`/guardians/${id}/`),
+    create: (data: GuardianWritePayload) =>
+      request<Guardian>("/guardians/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<GuardianWritePayload>) =>
+      request<Guardian>(`/guardians/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/guardians/${id}/`, { method: "DELETE" }),
+  },
+
+  studentGuardians: {
+    list: (params?: { student?: number; guardian?: number }) =>
+      request<PaginatedResponse<StudentGuardianLink>>(`/student-guardians/${toQueryString(params ?? {})}`),
+    create: (data: { student: number; guardian: number; is_primary_contact?: boolean }) =>
+      request<StudentGuardianLink>("/student-guardians/", { method: "POST", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/student-guardians/${id}/`, { method: "DELETE" }),
   },
 };

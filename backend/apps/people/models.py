@@ -214,3 +214,102 @@ class Enrollment(TimeStampedModel, SoftDeleteModel):
 
     def __str__(self):
         return f"{self.student.full_name} — {self.class_section} (Roll {self.roll_no})"
+
+
+class GuardianRelationship(models.TextChoices):
+    FATHER = "father", "Father"
+    MOTHER = "mother", "Mother"
+    GUARDIAN = "guardian", "Guardian"
+    OTHER = "other", "Other"
+
+
+class Guardian(TimeStampedModel, SoftDeleteModel):
+    """
+    A parent/guardian profile — see docs/database-schema.md's ERD
+    (`USER ||--o| GUARDIAN`) and docs/prototype-analysis.md §17.2's field
+    list: "Guardian — id, user_id (nullable), name, phone, email,
+    relationship."
+
+    Standalone entity (not a flat string on Student, as in the prototype —
+    see prototype-analysis.md's normalization note), linked to Student via
+    `StudentGuardian` below, which is what actually enables multiple
+    guardians per student.
+
+    `user` is nullable, same reasoning as Student/Teacher: a Guardian
+    profile can exist (e.g. entered by office staff during admission)
+    before or without ever having a Parent login attached.
+
+    Soft delete only, same historical-integrity reasoning as everywhere
+    else in this codebase.
+    """
+
+    user = models.OneToOneField(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="guardian_profile",
+    )
+    name = models.CharField(max_length=200)
+    phone = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
+    relationship = models.CharField(max_length=10, choices=GuardianRelationship.choices, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class StudentGuardian(TimeStampedModel):
+    """
+    Join table: links a Student to a Guardian, with an `is_primary_contact`
+    flag — see docs/database-schema.md's "Guardian / StudentGuardian"
+    section and prototype-analysis.md §17.2: "StudentGuardian (join) —
+    student_id, guardian_id, is_primary_contact." This is what supports
+    multiple guardians per student (the prototype supported exactly one
+    flat `guardian`/`guardianPhone` string pair — see
+    prototype-analysis.md §2).
+
+    This table is also the mechanism docs/permissions.md's "Scoping rules"
+    section names explicitly: "Parent → own child's ... records only ...
+    filtered via StudentGuardian to the children linked to that Parent's
+    account." See `guardian_child_student_ids()` below, used by every
+    other app's Parent-role queryset scoping (Student, Enrollment,
+    Attendance, Marks, Fees) to resolve that filter — this is the piece
+    those modules' docstrings flagged as "StudentGuardian doesn't exist
+    yet" when they were built.
+
+    Deliberately not soft-deletable, same reasoning as ClassSectionSubject/
+    TeacherAssignment: a pure association row, not a historical fact worth
+    preserving after removal.
+    """
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="student_guardians")
+    guardian = models.ForeignKey(Guardian, on_delete=models.CASCADE, related_name="student_guardians")
+    is_primary_contact = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["student", "-is_primary_contact"]
+        constraints = [
+            models.UniqueConstraint(fields=["student", "guardian"], name="people_unique_student_guardian"),
+        ]
+
+    def __str__(self):
+        primary = " (primary)" if self.is_primary_contact else ""
+        return f"{self.guardian.name} — {self.student.full_name}{primary}"
+
+
+def guardian_child_student_ids(user):
+    """
+    Every child Student id linked (via StudentGuardian) to the Guardian
+    profile owned by `user` — the shared resolution for the "Parent → own
+    child's records only" scoping rule (docs/permissions.md's "Scoping
+    rules" section) used across apps.people, apps.attendance, apps.marks,
+    and apps.fees. Returns an empty set (not an error) for a user with no
+    linked Guardian profile at all.
+    """
+    return set(
+        StudentGuardian.objects.filter(guardian__user=user).values_list("student_id", flat=True)
+    )

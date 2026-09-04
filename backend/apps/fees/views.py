@@ -26,9 +26,9 @@ def _scope_by_role(qs, user, student_field):
     Principal see everything (their Create/Edit/Delete rights differ, but
     that's enforced by HasModulePermission, not queryset scoping); Teacher
     gets zero RolePermission rows on this module at all, so they 403 before
-    ever reaching here; Student sees only their own; Parent gets an empty
-    queryset (StudentGuardian doesn't exist yet — same documented gap as
-    every other "own child" scoping rule in this codebase).
+    ever reaching here; Student sees only their own; Parent sees only
+    their linked children's (via `StudentGuardian`, resolved by
+    `guardian_child_student_ids()`).
     """
     if not user or not user.is_authenticated:
         return qs.none()
@@ -39,6 +39,10 @@ def _scope_by_role(qs, user, student_field):
         return qs
     if role_name == "Student":
         return qs.filter(**{f"{student_field}__user": user})
+    if role_name == "Parent":
+        from apps.people.models import guardian_child_student_ids
+
+        return qs.filter(**{f"{student_field}_id__in": guardian_child_student_ids(user)})
     return qs.none()
 
 

@@ -30,13 +30,9 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
       specifically ("a Teacher's queryset for Students/Marks/Attendance is
       filtered to ClassSections and Subjects they're actually assigned to").
     - Student: sees only their own records (via `student.user`).
+    - Parent: sees only their linked children's records (via
+      `StudentGuardian`, resolved by `guardian_child_student_ids()`).
     - Admin/Principal/Staff/superuser: full queryset.
-
-    Row-level scoping deliberately NOT yet implemented (documented, not
-    silently skipped), same as Student/Teacher's equivalent gaps:
-    - Parent "V (own child)" needs `StudentGuardian`, which doesn't exist
-      yet (Guardian module is a later milestone) — Parents get an empty
-      queryset rather than an error.
     """
 
     queryset = AttendanceRecord.objects.select_related(
@@ -60,9 +56,9 @@ class AttendanceRecordViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(class_section__in=_teacher_class_section_ids(user))
             elif role_name == "Student":
                 qs = qs.filter(student__user=user)
+            elif role_name == "Parent":
+                qs = qs.filter(student_id__in=_guardian_child_student_ids(user))
             else:
-                # Parent (or no role): StudentGuardian doesn't exist yet —
-                # deny by default rather than silently returning everything.
                 return qs.none()
 
         class_section_id = self.request.query_params.get("class_section")
@@ -120,3 +116,9 @@ def _teacher_class_section_ids(user):
             "assignments__class_section_subject__class_section_id", flat=True
         )
     )
+
+
+def _guardian_child_student_ids(user):
+    from apps.people.models import guardian_child_student_ids
+
+    return guardian_child_student_ids(user)

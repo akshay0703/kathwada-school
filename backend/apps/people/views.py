@@ -1,9 +1,20 @@
 from rest_framework import filters, viewsets
 
 from apps.accounts.permissions import HasModulePermission
-from apps.people.models import Enrollment, Student, Teacher, TeacherAssignment
+from apps.people.models import (
+    Enrollment,
+    Guardian,
+    Student,
+    StudentGuardian,
+    Teacher,
+    TeacherAssignment,
+    guardian_child_student_ids,
+)
 from apps.people.serializers import (
     EnrollmentSerializer,
+    GuardianListSerializer,
+    GuardianSerializer,
+    StudentGuardianSerializer,
     StudentListSerializer,
     StudentSerializer,
     TeacherAssignmentSerializer,
@@ -29,6 +40,9 @@ class StudentViewSet(viewsets.ModelViewSet):
 
     Row-level scoping implemented now:
     - Student role: sees only their own record (via `user`).
+    - Parent role: sees only their linked children (via `StudentGuardian`,
+      resolved by `guardian_child_student_ids()` — see
+      apps.people.models.StudentGuardian's docstring).
     - Admin/Principal/Staff/superuser: full queryset.
 
     Row-level scoping deliberately NOT yet implemented (documented, not
@@ -38,10 +52,6 @@ class StudentViewSet(viewsets.ModelViewSet):
       instruction) — Teachers currently see the full list once granted View
       by the RolePermission table, same interim state as Academic Years'
       Teacher row before scoping existed.
-    - Parent "V (own children)" needs `StudentGuardian`, which also doesn't
-      exist yet (Guardian module is a later milestone) — Parents currently
-      see an empty queryset rather than an error, since granting them
-      results with no ownership check would be a real data leak.
     """
 
     queryset = Student.objects.all().order_by("admission_no")
@@ -74,9 +84,9 @@ class StudentViewSet(viewsets.ModelViewSet):
                 pass
             elif role_name == "Student":
                 qs = qs.filter(user=user)
+            elif role_name == "Parent":
+                qs = qs.filter(id__in=guardian_child_student_ids(user))
             else:
-                # Parent (or no role): StudentGuardian doesn't exist yet —
-                # deny by default rather than silently returning everything.
                 return qs.none()
 
         # Manual, dependency-free filtering (no django-filter installed):
@@ -118,6 +128,8 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
                 pass
             elif role_name == "Student":
                 qs = qs.filter(student__user=user)
+            elif role_name == "Parent":
+                qs = qs.filter(student_id__in=guardian_child_student_ids(user))
             else:
                 return qs.none()
 
@@ -236,4 +248,92 @@ class TeacherAssignmentViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         # Pure association row — a real delete, not a soft delete, same as
         # ClassSectionSubject (see TeacherAssignment's model docstring).
+        instance.delete()
+
+
+class GuardianViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/guardians/ — permissions per the "Guardians" matrix row: Admin
+    VCEDX, Principal VEX, Teacher V, Staff VCEX, Student none at all,
+    Parent V(own record)+E(own contact info).
+
+    Row-level scoping implemented now:
+    - Parent role: sees/edits only their own Guardian profile (via `user`).
+      Full-record edit is allowed for now, same interim choice already
+      documented on Teacher's "E (own record)" row — restricting edit to
+      just phone/email specifically is a finer-grained follow-up, not
+      silently expanded scope.
+    - Admin/Principal/Staff/Teacher/superuser: full queryset. Student: no
+      RolePermission rows on this module at all, so they 403 before ever
+      reaching get_queryset.
+    """
+
+    queryset = Guardian.objects.all().order_by("name")
+    permission_classes = [HasModulePermission]
+    module_key = "guardians"
+    permission_action_map = STANDARD_ACTION_MAP
+    filter_backends = [filters.SearchFilter]
+    search_fields = ["name", "phone", "email"]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return GuardianListSerializer
+        return GuardianSerializer
+
+    def get_queryset(self):
+        qs = Guardian.objects.all().prefetch_related("student_guardians__student")
+        user = self.request.user
+        if not user or not user.is_authenticated:
+            return qs.none()
+        if user.is_superuser:
+            return qs
+        role_name = user.role.name if user.role else None
+        if role_name in ("Admin", "Principal", "Staff", "Teacher"):
+            return qs
+        if role_name == "Parent":
+            return qs.filter(user=user)
+        return qs.none()
+
+    def perform_destroy(self, instance):
+        instance.soft_delete()
+
+
+class StudentGuardianViewSet(viewsets.ModelViewSet):
+    """
+    /api/v1/student-guardians/ — same "guardians" module permissions,
+    since linking a guardian to a student is part of guardian management,
+    not a separate module in the approved matrix (mirrors how Enrollment
+    reuses the "students" module_key).
+    """
+
+    queryset = StudentGuardian.objects.select_related("student", "guardian").all()
+    serializer_class = StudentGuardianSerializer
+    permission_classes = [HasModulePermission]
+    module_key = "guardians"
+    permission_action_map = STANDARD_ACTION_MAP
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if not user or not user.is_authenticated:
+            return qs.none()
+        if not user.is_superuser:
+            role_name = user.role.name if user.role else None
+            if role_name in ("Admin", "Principal", "Staff", "Teacher"):
+                pass
+            elif role_name == "Parent":
+                qs = qs.filter(guardian__user=user)
+            else:
+                return qs.none()
+
+        student_id = self.request.query_params.get("student")
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+        guardian_id = self.request.query_params.get("guardian")
+        if guardian_id:
+            qs = qs.filter(guardian_id=guardian_id)
+        return qs
+
+    def perform_destroy(self, instance):
+        # Pure association row — a real delete, same as TeacherAssignment.
         instance.delete()
