@@ -410,6 +410,40 @@ export type GuardianWritePayload = {
   relationship?: GuardianRelationship | "";
 };
 
+export type Book = {
+  id: number;
+  title: string;
+  author: string;
+  category: string;
+  total_copies: number;
+  available_copies: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BookWritePayload = {
+  title: string;
+  author?: string;
+  category?: string;
+  total_copies?: number;
+};
+
+export type BookIssue = {
+  id: number;
+  book: number;
+  book_title: string;
+  student: number;
+  student_name: string;
+  student_admission_no: string;
+  issue_date: string;
+  due_date: string;
+  return_date: string | null;
+  fine_amount: string;
+  is_overdue: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PaginatedResponse<T> = {
   count: number;
   next: string | null;
@@ -703,5 +737,29 @@ export const api = {
     create: (data: { student: number; guardian: number; is_primary_contact?: boolean }) =>
       request<StudentGuardianLink>("/student-guardians/", { method: "POST", body: JSON.stringify(data) }),
     remove: (id: number) => request<void>(`/student-guardians/${id}/`, { method: "DELETE" }),
+  },
+
+  books: {
+    list: (params?: { search?: string; category?: string }) =>
+      request<PaginatedResponse<Book>>(`/books/${toQueryString(params ?? {})}`),
+    create: (data: BookWritePayload) => request<Book>("/books/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<BookWritePayload>) =>
+      request<Book>(`/books/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => request<void>(`/books/${id}/`, { method: "DELETE" }),
+  },
+
+  bookIssues: {
+    list: (params?: { book?: number; student?: number; outstanding?: boolean }) =>
+      request<PaginatedResponse<BookIssue>>(
+        `/book-issues/${toQueryString({ ...params, outstanding: params?.outstanding ? "true" : undefined })}`
+      ),
+    create: (data: { book: number; student: number; issue_date: string; due_date?: string }) =>
+      request<BookIssue>("/book-issues/", { method: "POST", body: JSON.stringify(data) }),
+    returnBook: (id: number, returnDate?: string) =>
+      request<BookIssue>(`/book-issues/${id}/return/`, {
+        method: "POST",
+        body: JSON.stringify(returnDate ? { return_date: returnDate } : {}),
+      }),
+    remove: (id: number) => request<void>(`/book-issues/${id}/`, { method: "DELETE" }),
   },
 };
