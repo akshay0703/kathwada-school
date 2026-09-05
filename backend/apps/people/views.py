@@ -96,6 +96,8 @@ class StudentViewSet(viewsets.ModelViewSet):
         class_section_id = self.request.query_params.get("class_section")
         if class_section_id:
             qs = qs.filter(enrollments__class_section_id=class_section_id, enrollments__status="active")
+        if self.request.query_params.get("unlinked") == "true":
+            qs = qs.filter(user__isnull=True)
         return qs.distinct()
 
     def perform_destroy(self, instance):
@@ -197,6 +199,8 @@ class TeacherViewSet(viewsets.ModelViewSet):
         class_section_id = self.request.query_params.get("class_section")
         if class_section_id:
             qs = qs.filter(assignments__class_section_subject__class_section_id=class_section_id)
+        if self.request.query_params.get("unlinked") == "true":
+            qs = qs.filter(user__isnull=True)
         return qs.distinct()
 
     def perform_destroy(self, instance):
@@ -286,13 +290,19 @@ class GuardianViewSet(viewsets.ModelViewSet):
         if not user or not user.is_authenticated:
             return qs.none()
         if user.is_superuser:
-            return qs
-        role_name = user.role.name if user.role else None
-        if role_name in ("Admin", "Principal", "Staff", "Teacher"):
-            return qs
-        if role_name == "Parent":
-            return qs.filter(user=user)
-        return qs.none()
+            pass
+        else:
+            role_name = user.role.name if user.role else None
+            if role_name in ("Admin", "Principal", "Staff", "Teacher"):
+                pass
+            elif role_name == "Parent":
+                qs = qs.filter(user=user)
+            else:
+                return qs.none()
+
+        if self.request.query_params.get("unlinked") == "true":
+            qs = qs.filter(user__isnull=True)
+        return qs
 
     def perform_destroy(self, instance):
         instance.soft_delete()

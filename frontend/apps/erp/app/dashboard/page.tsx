@@ -101,6 +101,23 @@ export default function DashboardPage() {
         </Link>
 
         <Link
+          href="/users"
+          style={{
+            display: "block",
+            border: "1px solid var(--line)",
+            borderRadius: "8px",
+            padding: "16px 20px",
+            textDecoration: "none",
+            minWidth: "200px",
+          }}
+        >
+          <div style={{ color: "var(--navy-primary)", fontWeight: 600, fontSize: "15px" }}>Users</div>
+          <div style={{ color: "var(--ink)", opacity: 0.65, fontSize: "13px", marginTop: "4px" }}>
+            Manage logins, roles, and profile links (Admin only)
+          </div>
+        </Link>
+
+        <Link
           href="/library"
           style={{
             display: "block",

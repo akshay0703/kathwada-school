@@ -27,6 +27,36 @@ export type CurrentUser = {
   last_login_at: string | null;
 };
 
+export type Role = {
+  id: number;
+  name: string;
+  description: string;
+};
+
+export type ManagedUser = {
+  id: number;
+  email: string;
+  role: string | null;
+  role_id: number | null;
+  is_active: boolean;
+  is_superuser: boolean;
+  last_login_at: string | null;
+  created_at: string;
+};
+
+export type UserCreatePayload = {
+  email: string;
+  password: string;
+  role_id?: number | null;
+  is_active?: boolean;
+};
+
+export type UserUpdatePayload = {
+  email?: string;
+  role_id?: number | null;
+  is_active?: boolean;
+};
+
 export type AcademicYear = {
   id: number;
   school: string;
@@ -144,6 +174,7 @@ export type StudentWritePayload = {
   address?: string;
   phone?: string;
   admission_date?: string | null;
+  user?: number | null;
 };
 
 export type TeacherAssignment = {
@@ -190,6 +221,7 @@ export type TeacherWritePayload = {
   phone?: string;
   email?: string;
   joined_date?: string | null;
+  user?: number | null;
 };
 
 export type AttendanceStatus = "present" | "absent" | "late" | "excused";
@@ -408,6 +440,7 @@ export type GuardianWritePayload = {
   phone?: string;
   email?: string;
   relationship?: GuardianRelationship | "";
+  user?: number | null;
 };
 
 export type Book = {
@@ -614,8 +647,10 @@ export const api = {
   },
 
   students: {
-    list: (params?: { search?: string; gender?: string; class_section?: number; ordering?: string }) =>
-      request<PaginatedResponse<StudentListItem>>(`/students/${toQueryString(params ?? {})}`),
+    list: (params?: { search?: string; gender?: string; class_section?: number; ordering?: string; unlinked?: boolean }) =>
+      request<PaginatedResponse<StudentListItem>>(
+        `/students/${toQueryString({ ...params, unlinked: params?.unlinked ? "true" : undefined })}`
+      ),
     listPage: (url: string) => requestAbsolute<PaginatedResponse<StudentListItem>>(url),
     retrieve: (id: number) => request<Student>(`/students/${id}/`),
     create: (data: StudentWritePayload) =>
@@ -636,8 +671,10 @@ export const api = {
   },
 
   teachers: {
-    list: (params?: { search?: string; class_section?: number; ordering?: string }) =>
-      request<PaginatedResponse<TeacherListItem>>(`/teachers/${toQueryString(params ?? {})}`),
+    list: (params?: { search?: string; class_section?: number; ordering?: string; unlinked?: boolean }) =>
+      request<PaginatedResponse<TeacherListItem>>(
+        `/teachers/${toQueryString({ ...params, unlinked: params?.unlinked ? "true" : undefined })}`
+      ),
     listPage: (url: string) => requestAbsolute<PaginatedResponse<TeacherListItem>>(url),
     retrieve: (id: number) => request<Teacher>(`/teachers/${id}/`),
     create: (data: TeacherWritePayload) =>
@@ -721,8 +758,10 @@ export const api = {
   },
 
   guardians: {
-    list: (params?: { search?: string }) =>
-      request<PaginatedResponse<GuardianListItem>>(`/guardians/${toQueryString(params ?? {})}`),
+    list: (params?: { search?: string; unlinked?: boolean }) =>
+      request<PaginatedResponse<GuardianListItem>>(
+        `/guardians/${toQueryString({ ...params, unlinked: params?.unlinked ? "true" : undefined })}`
+      ),
     retrieve: (id: number) => request<Guardian>(`/guardians/${id}/`),
     create: (data: GuardianWritePayload) =>
       request<Guardian>("/guardians/", { method: "POST", body: JSON.stringify(data) }),
@@ -761,5 +800,26 @@ export const api = {
         body: JSON.stringify(returnDate ? { return_date: returnDate } : {}),
       }),
     remove: (id: number) => request<void>(`/book-issues/${id}/`, { method: "DELETE" }),
+  },
+
+  users: {
+    list: (params?: { search?: string; role?: number; is_active?: boolean }) =>
+      request<PaginatedResponse<ManagedUser>>(
+        `/auth/users/${toQueryString({ ...params, is_active: params?.is_active === undefined ? undefined : String(params.is_active) })}`
+      ),
+    retrieve: (id: number) => request<ManagedUser>(`/auth/users/${id}/`),
+    create: (data: UserCreatePayload) =>
+      request<ManagedUser>("/auth/users/", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: UserUpdatePayload) =>
+      request<ManagedUser>(`/auth/users/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+    setPassword: (id: number, password: string) =>
+      request<{ detail: string }>(`/auth/users/${id}/set-password/`, {
+        method: "POST",
+        body: JSON.stringify({ password }),
+      }),
+  },
+
+  roles: {
+    list: () => request<PaginatedResponse<Role>>("/auth/roles/"),
   },
 };
