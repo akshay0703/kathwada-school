@@ -82,3 +82,13 @@ services:
         sync: false # from Supabase: Project Settings -> Storage -> S3 Connection -> Endpoint
       - key: AWS_S3_REGION_NAME
         sync: false # from the same Supabase Storage S3 Connection panel, e.g. ap-south-1
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false # the first Admin login's email — set this manually in the Render dashboard, never commit a real value here
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false # the first Admin login's password — set this manually in the Render dashboard, never commit a real value here
+      # DJANGO_SUPERUSER_RESET_PASSWORD is intentionally NOT declared here.
+      # It's an opt-in, temporary-only flag (see create_admin_from_env's
+      # docstring) — add it directly in the Render dashboard set to "true"
+      # only when you need to reset a forgotten admin password, then delete
+      # it again immediately, so it doesn't silently reset the password on
+      # every future deploy.

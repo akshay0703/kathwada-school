@@ -94,6 +94,17 @@ grouped by service.
 | `AWS_STORAGE_BUCKET_NAME` | The bucket name you create in Supabase Storage, e.g. `kathwada-documents` |
 | `AWS_S3_ENDPOINT_URL` | From Supabase: **Project Settings → Storage → S3 Connection → Endpoint** |
 | `AWS_S3_REGION_NAME` | Same Supabase Storage S3 Connection panel, e.g. `ap-south-1` |
+| `DJANGO_SUPERUSER_EMAIL` | Pick the email for the first Admin login — this account is created automatically on first deploy (see "First login" below) |
+| `DJANGO_SUPERUSER_PASSWORD` | Pick a strong password for that same account — change it after first login if you'd rather not leave it in Render's dashboard long-term |
+
+**First login:** on first deploy, `build.sh` runs `create_admin_from_env`,
+which creates exactly one Admin superuser from the two variables above (and
+does nothing if they're unset). On every later deploy it leaves that account
+alone — it will never reset the password or create a duplicate. If you ever
+need to reset a forgotten password, add a *third*, temporary variable,
+`DJANGO_SUPERUSER_RESET_PASSWORD=true`, redeploy once, confirm you can log
+in, then delete that variable again — leaving it set would silently reset
+the password back to `DJANGO_SUPERUSER_PASSWORD` on every future deploy.
 
 **`kathwada-public-site` (Render Static Site):**
 
