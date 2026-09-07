@@ -1,21 +1,33 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
-function getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(new RegExp(`(^| )${name}=([^;]+)`));
-  return match ? decodeURIComponent(match[2]) : null;
-}
-
-// Always fetches a fresh CSRF cookie before an unsafe request, rather than
-// trusting a possibly-stale cookie already present in the browser. The
-// previous version short-circuited ("if the cookie already exists, skip
-// fetching") which could leave a stale/expired token in place — Django then
-// rejects the request with "CSRF token missing" because our code silently
-// omits the header when getCookie() finds nothing usable, rather than
-// erroring loudly. One extra GET per write request is a small, deliberate
-// cost for correctness in a low-traffic school ERP, not a hot path.
-async function ensureCsrfCookie(): Promise<void> {
-  await fetch(`${API_BASE_URL}/auth/csrf/`, { credentials: "include" });
+// Fetches a fresh CSRF token before every unsafe request and reads it
+// directly from the JSON response body, not from document.cookie. The
+// previous version relied on the browser making the csrftoken cookie
+// readable via JS after ensureCsrfCookie()'s fetch — which works fine
+// same-origin in local dev, but is exactly the kind of cross-site cookie
+// access that Safari's Intelligent Tracking Prevention (and Chrome's
+// ongoing third-party-cookie restrictions) can silently block, even with
+// SameSite=None; Secure set correctly on the backend (see
+// config/settings/prod.py) — SameSite=None controls whether the browser
+// *sends* the cookie on a cross-site request, not whether JS is allowed
+// to *read* it back afterward via document.cookie, and those are governed
+// by separate, stricter anti-tracking rules in some browsers. Reading the
+// token from the response body sidesteps that failure mode entirely: it's
+// just parsing an ordinary (CORS-permitted) JSON response, not touching
+// the cookie jar at all. The session cookie itself still depends on
+// SameSite=None; Secure being sent by the browser on the request — that
+// part is unavoidable and already handled — this only hardens CSRF
+// *token acquisition*, the other half of the same cross-site cookie story.
+async function fetchCsrfToken(): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/auth/csrf/`, { credentials: "include" });
+  if (!response.ok) {
+    throw new ApiError(response.status, null, "Could not obtain a CSRF token. Please reload the page and try again.");
+  }
+  const data = (await response.json()) as { csrfToken?: string };
+  if (!data.csrfToken) {
+    throw new ApiError(0, data, "Could not obtain a CSRF token. Please reload the page and try again.");
+  }
+  return data.csrfToken;
 }
 
 export type CurrentUser = {
@@ -508,20 +520,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
   const isUnsafe = !["GET", "HEAD", "OPTIONS"].includes(method);
 
-  if (isUnsafe) {
-    await ensureCsrfCookie();
-  }
-
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
   if (isUnsafe) {
-    const csrfToken = getCookie("csrftoken");
-    if (!csrfToken) {
-      // Loud failure instead of silently sending the request without the
-      // header (which is what produced the confusing "CSRF token missing"
-      // error straight from Django, with no client-side context at all).
-      throw new ApiError(0, null, "Could not obtain a CSRF token. Please reload the page and try again.");
-    }
+    const csrfToken = await fetchCsrfToken();
     headers.set("X-CSRFToken", csrfToken);
   }
 
