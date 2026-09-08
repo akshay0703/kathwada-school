@@ -19,7 +19,20 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8
 // part is unavoidable and already handled — this only hardens CSRF
 // *token acquisition*, the other half of the same cross-site cookie story.
 async function fetchCsrfToken(): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/auth/csrf/`, { credentials: "include" });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/auth/csrf/`, { credentials: "include" });
+  } catch (error) {
+    // fetch() itself throws (network failure, CORS rejection, DNS failure,
+    // connection refused) rather than resolving with a non-ok Response —
+    // without this catch, that raw error would bypass ApiError entirely
+    // and surface to the UI as an unhelpful generic fallback message
+    // ("Could not load ...", "Could not create ...") with no actual
+    // diagnostic information. This was a real, confirmed bug: every path
+    // through this file that calls fetch() needs its own try/catch, since
+    // JS doesn't propagate a rejected fetch() as anything else.
+    throw new ApiError(0, error, "Could not connect to the server. Please check your connection and try again.");
+  }
   if (!response.ok) {
     throw new ApiError(response.status, null, "Could not obtain a CSRF token. Please reload the page and try again.");
   }
@@ -516,6 +529,19 @@ function toQueryString(params: Record<string, string | number | undefined | null
   return `?${search.toString()}`;
 }
 
+// Shared wrapper so every call site (request, requestAbsolute) converts a
+// raw fetch() rejection into an ApiError with an accurate message, instead
+// of letting a network-level failure (CORS rejection, DNS failure,
+// connection refused, offline) escape unwrapped — see fetchCsrfToken's
+// comment above for the full story on why this matters and was missing.
+async function fetchWithNetworkErrorHandling(input: RequestInfo, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    throw new ApiError(0, error, "Could not connect to the server. Please check your connection and try again.");
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
   const isUnsafe = !["GET", "HEAD", "OPTIONS"].includes(method);
@@ -527,7 +553,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.set("X-CSRFToken", csrfToken);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithNetworkErrorHandling(`${API_BASE_URL}${path}`, {
     ...options,
     method,
     headers,
@@ -569,7 +595,7 @@ function extractErrorMessage(body: unknown): string | null {
 // For following a paginated response's `next`/`previous` URLs directly
 // (DRF returns full absolute URLs for those, already including API_BASE_URL).
 async function requestAbsolute<T>(url: string): Promise<T> {
-  const response = await fetch(url, { credentials: "include" });
+  const response = await fetchWithNetworkErrorHandling(url, { credentials: "include" });
   if (!response.ok) {
     let body: unknown = null;
     let detail = response.statusText;
